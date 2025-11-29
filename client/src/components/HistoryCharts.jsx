@@ -18,9 +18,14 @@ function HistoryCharts() {
                 ram_usage: (h.memory?.used || h.ram_usage) / 1024 / 1024 / 1024
             }));
             setData(formatted);
+
             // Initial zoom: last 60 points
-            const start = Math.max(0, formatted.length - 60);
-            setRange({ startIndex: start, endIndex: formatted.length - 1 });
+            if (formatted.length > 0) {
+                const start = Math.max(0, formatted.length - 60);
+                setRange({ startIndex: start, endIndex: formatted.length - 1 });
+            } else {
+                setRange({ startIndex: 0, endIndex: 0 });
+            }
             isAutoScrollRef.current = true;
 
             // Try to set total RAM from history if available
@@ -53,6 +58,12 @@ function HistoryCharts() {
                     if (isAutoScrollRef.current) {
                         // Auto-scroll: keep window size, move to end
                         const newEnd = newData.length - 1;
+
+                        // If we are just starting (prev was empty), show from 0
+                        if (prev.length === 0) {
+                            return { startIndex: 0, endIndex: newEnd };
+                        }
+
                         const windowSize = prevRange.endIndex - prevRange.startIndex;
                         const newStart = Math.max(0, newEnd - windowSize);
                         return { startIndex: newStart, endIndex: newEnd };
@@ -117,7 +128,7 @@ function HistoryCharts() {
                         dataKey="cpu_usage"
                         stroke="var(--accent)"
                         strokeWidth={2}
-                        dot={false}
+                        dot={data.length < 2}
                         activeDot={{ r: 4 }}
                         name="CPU %"
                         isAnimationActive={false}
@@ -128,7 +139,7 @@ function HistoryCharts() {
                         dataKey="ram_usage"
                         stroke="var(--success)"
                         strokeWidth={2}
-                        dot={false}
+                        dot={data.length < 2}
                         activeDot={{ r: 4 }}
                         name="RAM"
                         isAnimationActive={false}
