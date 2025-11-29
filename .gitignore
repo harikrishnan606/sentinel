@@ -6,3 +6,8 @@ build/
 .DS_Store
 coverage/
 .vscode/
+
+# Database
+*.db
+*.sqlite
+*.sqlite-journal
