@@ -25,14 +25,14 @@ function HistoryCharts() {
 
             // Try to set total RAM from history if available
             if (history.length > 0 && history[history.length - 1].memory?.total) {
-                setTotalRam(history[history.length - 1].memory.total / 1024 / 1024 / 1024);
+                setTotalRam(Math.round(history[history.length - 1].memory.total / 1024 / 1024 / 1024));
             }
         });
 
         socket.on('metrics', (metric) => {
             // Update total RAM if not set
             if (metric.memory?.total) {
-                setTotalRam(metric.memory.total / 1024 / 1024 / 1024);
+                setTotalRam(Math.round(metric.memory.total / 1024 / 1024 / 1024));
             }
 
             setData(prev => {
