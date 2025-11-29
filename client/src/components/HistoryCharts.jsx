@@ -1,14 +1,12 @@
-import React, { useEffect, useState, useRef } from 'react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Brush } from 'recharts';
+import React, { useEffect, useState } from 'react';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import io from 'socket.io-client';
 
 const socket = io(`http://${window.location.hostname}:3001`);
 
 function HistoryCharts() {
     const [data, setData] = useState([]);
-    const [range, setRange] = useState({ startIndex: 0, endIndex: 0 });
     const [totalRam, setTotalRam] = useState(0);
-    const isAutoScrollRef = useRef(true);
 
     useEffect(() => {
         socket.on('history', (history) => {
@@ -18,15 +16,6 @@ function HistoryCharts() {
                 ram_usage: (h.memory?.used || h.ram_usage) / 1024 / 1024 / 1024
             }));
             setData(formatted);
-
-            // Initial zoom: last 60 points
-            if (formatted.length > 0) {
-                const start = Math.max(0, formatted.length - 60);
-                setRange({ startIndex: start, endIndex: formatted.length - 1 });
-            } else {
-                setRange({ startIndex: 0, endIndex: 0 });
-            }
-            isAutoScrollRef.current = true;
 
             // Try to set total RAM from history if available
             if (history.length > 0 && history[history.length - 1].memory?.total) {
@@ -47,34 +36,8 @@ function HistoryCharts() {
                     ram_usage: metric.memory.used / 1024 / 1024 / 1024
                 };
 
-                // Check if we are about to shift (limit is 100)
-                const willShift = prev.length >= 100;
-
                 const newData = [...prev, newPoint];
                 if (newData.length > 100) newData.shift();
-
-                // Update range
-                setRange(prevRange => {
-                    if (isAutoScrollRef.current) {
-                        // Auto-scroll: keep window size, move to end
-                        const newEnd = newData.length - 1;
-
-                        // If we are just starting (prev was empty), show from 0
-                        if (prev.length === 0) {
-                            return { startIndex: 0, endIndex: newEnd };
-                        }
-
-                        const windowSize = prevRange.endIndex - prevRange.startIndex;
-                        const newStart = Math.max(0, newEnd - windowSize);
-                        return { startIndex: newStart, endIndex: newEnd };
-                    } else if (willShift) {
-                        // User panning + Data Shift: Decrement indices to follow data
-                        const newStart = Math.max(0, prevRange.startIndex - 1);
-                        const newEnd = Math.max(0, prevRange.endIndex - 1);
-                        return { startIndex: newStart, endIndex: newEnd };
-                    }
-                    return prevRange;
-                });
 
                 return newData;
             });
@@ -143,25 +106,6 @@ function HistoryCharts() {
                         activeDot={{ r: 4 }}
                         name="RAM"
                         isAnimationActive={false}
-                    />
-                    <Brush
-                        dataKey="time"
-                        height={25}
-                        y={310}
-                        stroke="var(--accent)"
-                        fill="var(--bg-secondary)"
-                        tickFormatter={() => ''}
-                        startIndex={range.startIndex}
-                        endIndex={range.endIndex}
-                        onChange={(newRange) => {
-                            setRange(newRange);
-                            // If user scrolled to the end (or close to it), re-enable auto-scroll
-                            if (newRange.endIndex >= data.length - 2) {
-                                isAutoScrollRef.current = true;
-                            } else {
-                                isAutoScrollRef.current = false;
-                            }
-                        }}
                     />
                 </LineChart>
             </ResponsiveContainer>
