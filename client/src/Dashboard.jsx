@@ -7,6 +7,41 @@ import HistoryCharts from './components/HistoryCharts';
 import GpuWidget from './components/GpuWidget';
 import axios from 'axios';
 
+function PowerButton({ action, label, color, textColor, onConfirm }) {
+    const [confirming, setConfirming] = React.useState(false);
+
+    React.useEffect(() => {
+        if (confirming) {
+            const timer = setTimeout(() => setConfirming(false), 3000);
+            return () => clearTimeout(timer);
+        }
+    }, [confirming]);
+
+    const handleClick = () => {
+        if (confirming) {
+            onConfirm(action);
+            setConfirming(false);
+        } else {
+            setConfirming(true);
+        }
+    };
+
+    return (
+        <button
+            className="btn"
+            style={{
+                backgroundColor: confirming ? 'var(--danger)' : color,
+                color: confirming ? '#fff' : textColor,
+                transition: 'all 0.2s ease',
+                minWidth: '100px'
+            }}
+            onClick={handleClick}
+        >
+            {confirming ? 'Confirm?' : label}
+        </button>
+    );
+}
+
 function Dashboard({ metrics }) {
     const totalStorage = metrics.storage.reduce((acc, drive) => acc + drive.size, 0);
     const totalUsed = metrics.storage.reduce((acc, drive) => acc + drive.used, 0);
@@ -21,44 +56,43 @@ function Dashboard({ metrics }) {
     };
 
     const handlePowerAction = async (action) => {
-        if (window.confirm(`Are you sure you want to ${action} the system?`)) {
-            try {
-                console.log(`Sending power action: ${action}`);
-                const response = await axios.post(`http://${window.location.hostname}:3001/api/system/power`, { action });
-                console.log('Power action response:', response.data);
-                alert(`Success: ${response.data.message}`);
-            } catch (error) {
-                console.error('Power action failed:', error);
-                const errorMsg = error.response?.data?.error || error.message;
-                const status = error.response?.status;
-                alert(`Failed to ${action} (Status: ${status}): ${errorMsg}`);
-            }
+        try {
+            console.log(`Sending power action: ${action}`);
+            const response = await axios.post(`http://${window.location.hostname}:3001/api/system/power`, { action });
+            console.log('Power action response:', response.data);
+            alert(`Success: ${response.data.message}`);
+        } catch (error) {
+            console.error('Power action failed:', error);
+            const errorMsg = error.response?.data?.error || error.message;
+            const status = error.response?.status;
+            alert(`Failed to ${action} (Status: ${status}): ${errorMsg}`);
         }
     };
 
     return (
         <>
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginBottom: '1rem' }}>
-                <button
-                    className="btn"
-                    style={{ backgroundColor: 'var(--warning)', color: '#000' }}
-                    onClick={() => handlePowerAction('sleep')}
-                >
-                    Sleep
-                </button>
-                <button
-                    className="btn"
-                    style={{ backgroundColor: 'var(--accent)', color: '#fff' }}
-                    onClick={() => handlePowerAction('hibernate')}
-                >
-                    Hibernate
-                </button>
-                <button
-                    className="btn btn-danger"
-                    onClick={() => handlePowerAction('shutdown')}
-                >
-                    Shutdown
-                </button>
+                <PowerButton
+                    action="sleep"
+                    label="Sleep"
+                    color="var(--warning)"
+                    textColor="#000"
+                    onConfirm={handlePowerAction}
+                />
+                <PowerButton
+                    action="hibernate"
+                    label="Hibernate"
+                    color="var(--accent)"
+                    textColor="#fff"
+                    onConfirm={handlePowerAction}
+                />
+                <PowerButton
+                    action="shutdown"
+                    label="Shutdown"
+                    color="var(--danger)"
+                    textColor="#fff"
+                    onConfirm={handlePowerAction}
+                />
             </div>
             <div className="dashboard-grid">
                 <CpuWidget data={metrics.cpu} />
