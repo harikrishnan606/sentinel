@@ -26,8 +26,8 @@ async function getFastStats() {
             memory: {
                 total: mem.total,
                 free: mem.free,
-                used: mem.used,
-                active: mem.active,
+                used: mem.total - mem.available, // Match Task Manager (Total - Available)
+                active: mem.total - mem.available, // Use same logic for consistency
                 available: mem.available
             },
             network: networkStats.map(iface => ({

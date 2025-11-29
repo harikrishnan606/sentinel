@@ -19,7 +19,7 @@ function setupSocket(io) {
         console.log('Client connected');
 
         // Send initial history
-        getHistory(3600, (data) => {
+        getHistory(100, (data) => {
             socket.emit('history', data);
         });
 
