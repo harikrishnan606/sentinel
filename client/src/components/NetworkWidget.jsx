@@ -5,6 +5,23 @@ function NetworkWidget({ data }) {
     // Let's take the first active one
     const iface = data.find(i => i.operstate === 'up') || data[0];
 
+    const formatBits = (bytes) => {
+        const bits = bytes * 8;
+        if (bits === 0) return '0 bps';
+        const k = 1000; // Standard for bits is usually decimal (1kbps = 1000bps), but 1024 is often used in OS. Let's stick to 1024 for consistency with other metrics or 1000 for network standard? 
+        // Network speeds are typically measured in decimal (1 Mbps = 1,000,000 bps).
+        // Let's use 1024 to match the previous byte calculation style if we want "binary" bits, but standard network is decimal.
+        // However, usually people expect 10 Mbps to be 10 * 10^6. 
+        // Let's stick to 1024 for now as it's safer for "computer" metrics, or standard 1000? 
+        // Actually, standard network is 1000. But let's check what the user might expect. 
+        // Let's use 1024 for simplicity and consistency with the previous code which used 1024 for bytes.
+        // Wait, previous code was `bytes / 1024 / 1024` for MB. 
+        // Let's use 1024.
+        const sizes = ['bps', 'Kbps', 'Mbps', 'Gbps'];
+        const i = Math.floor(Math.log(bits) / Math.log(k));
+        return parseFloat((bits / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    };
+
     if (!iface) return <div className="card">No Network Interface</div>;
 
     return (
@@ -18,13 +35,13 @@ function NetworkWidget({ data }) {
                 <div>
                     <div className="metric-sub">Download</div>
                     <div className="metric-value" style={{ fontSize: '1.5rem' }}>
-                        {(iface.rx_sec / 1024 / 1024).toFixed(2)} <span style={{ fontSize: '1rem' }}>MB/s</span>
+                        {formatBits(iface.rx_sec)}
                     </div>
                 </div>
                 <div style={{ textAlign: 'right' }}>
                     <div className="metric-sub">Upload</div>
                     <div className="metric-value" style={{ fontSize: '1.5rem' }}>
-                        {(iface.tx_sec / 1024 / 1024).toFixed(2)} <span style={{ fontSize: '1rem' }}>MB/s</span>
+                        {formatBits(iface.tx_sec)}
                     </div>
                 </div>
             </div>
