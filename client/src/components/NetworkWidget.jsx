@@ -19,7 +19,12 @@ function NetworkWidget({ data }) {
         // Let's use 1024.
         const sizes = ['bps', 'Kbps', 'Mbps', 'Gbps'];
         const i = Math.floor(Math.log(bits) / Math.log(k));
-        return parseFloat((bits / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        const value = parseFloat((bits / Math.pow(k, i)));
+
+        // Conditional rounding: if > 9, round to integer. Else keep 2 decimals.
+        const formattedValue = value > 9 ? Math.round(value) : value.toFixed(2);
+
+        return formattedValue + ' ' + sizes[i];
     };
 
     if (!iface) return <div className="card">No Network Interface</div>;
@@ -32,15 +37,15 @@ function NetworkWidget({ data }) {
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.5rem' }}>
-                <div>
+                <div style={{ overflow: 'hidden' }}>
                     <div className="metric-sub">Download</div>
-                    <div className="metric-value" style={{ fontSize: '1.5rem' }}>
+                    <div className="metric-value" style={{ fontSize: '1.5rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={formatBits(iface.rx_sec)}>
                         {formatBits(iface.rx_sec)}
                     </div>
                 </div>
-                <div style={{ textAlign: 'right' }}>
+                <div style={{ textAlign: 'right', overflow: 'hidden' }}>
                     <div className="metric-sub">Upload</div>
-                    <div className="metric-value" style={{ fontSize: '1.5rem' }}>
+                    <div className="metric-value" style={{ fontSize: '1.5rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={formatBits(iface.tx_sec)}>
                         {formatBits(iface.tx_sec)}
                     </div>
                 </div>
