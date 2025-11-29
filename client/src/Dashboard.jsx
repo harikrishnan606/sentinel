@@ -5,6 +5,7 @@ import NetworkWidget from './components/NetworkWidget';
 import ProcessTable from './components/ProcessTable';
 import HistoryCharts from './components/HistoryCharts';
 import GpuWidget from './components/GpuWidget';
+import ServiceShortcuts from './components/ServiceShortcuts';
 import axios from 'axios';
 
 function PowerButton({ action, label, color, textColor, onConfirm }) {
@@ -94,6 +95,9 @@ function Dashboard({ metrics }) {
                     onConfirm={handlePowerAction}
                 />
             </div>
+
+            <ServiceShortcuts />
+
             <div className="dashboard-grid">
                 <CpuWidget data={metrics.cpu} />
                 <RamWidget data={metrics.memory} />
