@@ -66,7 +66,6 @@ function ProcessTable({ processes }) {
                             <th onClick={() => requestSort('cpu')} style={{ cursor: 'pointer' }}>CPU %</th>
                             <th onClick={() => requestSort('mem')} style={{ cursor: 'pointer' }}>Mem %</th>
                             <th onClick={() => requestSort('gpu')} style={{ cursor: 'pointer' }}>GPU %</th>
-                            <th onClick={() => requestSort('user')} style={{ cursor: 'pointer' }}>User</th>
                             <th>Action</th>
                         </tr>
                     </thead>
@@ -78,7 +77,6 @@ function ProcessTable({ processes }) {
                                 <td>{p.cpu.toFixed(1)}%</td>
                                 <td>{p.mem.toFixed(1)}%</td>
                                 <td>{p.gpu ? p.gpu.toFixed(1) : '0.0'}%</td>
-                                <td>{p.user}</td>
                                 <td>
                                     <button
                                         className="btn btn-danger"
