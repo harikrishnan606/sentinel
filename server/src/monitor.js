@@ -137,6 +137,7 @@ async function getSlowStats() {
             })),
             processes: {
                 all: processes.list
+                    .filter(p => p.name !== 'System Idle Process' && p.name !== 'Idle')
                     .map(p => ({
                         ...p,
                         gpu: gpuProcessUsage[p.pid] || 0
