@@ -74,6 +74,14 @@ function ProcessTable({ processes }) {
         setSortConfig({ key, direction });
     };
 
+    const formatBytes = (bytes) => {
+        if (bytes === 0) return '0 B';
+        const k = 1024;
+        const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+    };
+
     return (
         <div className="card">
             <div className="card-header">
@@ -102,6 +110,7 @@ function ProcessTable({ processes }) {
                             <th onClick={() => requestSort('cpu')} style={{ cursor: 'pointer' }}>CPU %</th>
                             <th onClick={() => requestSort('mem')} style={{ cursor: 'pointer' }}>Mem %</th>
                             <th onClick={() => requestSort('gpu')} style={{ cursor: 'pointer' }}>GPU %</th>
+                            <th onClick={() => requestSort('disk')} style={{ cursor: 'pointer' }}>Disk</th>
                             <th>Action</th>
                         </tr>
                     </thead>
@@ -113,6 +122,7 @@ function ProcessTable({ processes }) {
                                 <td>{p.cpu.toFixed(1)}%</td>
                                 <td>{p.mem.toFixed(1)}%</td>
                                 <td>{p.gpu ? p.gpu.toFixed(1) : '0.0'}%</td>
+                                <td>{formatBytes(p.disk || 0)}/s</td>
                                 <td>
                                     <KillButton pid={p.pid} name={p.name} onKill={handleKill} />
                                 </td>

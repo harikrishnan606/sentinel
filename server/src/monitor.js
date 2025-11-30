@@ -60,6 +60,73 @@ async function getGpuLoad() {
     }
 }
 
+
+
+async function getDiskProcessUsage() {
+    try {
+        // Fetch both ID Process and IO Data Bytes/sec
+        // We need a larger buffer for many processes
+        const { stdout } = await execPromise('typeperf "\\Process(*)\\ID Process" "\\Process(*)\\IO Data Bytes/sec" -sc 1 -y', { maxBuffer: 1024 * 1024 * 10 });
+        const lines = stdout.trim().split('\n');
+        if (lines.length < 2) return {};
+
+        const headers = lines[0].split(',').map(h => h.replace(/"/g, ''));
+        const values = lines[1].split(',').map(v => v.replace(/"/g, ''));
+
+        const pidMap = {}; // Index -> PID
+        const diskUsage = {}; // PID -> Bytes/sec
+
+        // First pass: Find PIDs
+        headers.forEach((header, index) => {
+            if (header.includes('\\ID Process')) {
+                const val = parseFloat(values[index]);
+                if (!isNaN(val)) {
+                    pidMap[index] = val; // Store PID at this index
+                }
+            }
+        });
+
+        // Second pass: Find IO Data and map to PID
+        // The counters are usually returned in blocks. 
+        // We need to match the instance name.
+        // A safer way is to parse the instance name from the header.
+
+        // Let's build a map of InstanceName -> PID
+        const instanceToPid = {};
+
+        headers.forEach((header, index) => {
+            // Header format: \\Machine\Process(Instance)\Counter
+            const match = header.match(/\\Process\(([^)]+)\)\\ID Process/);
+            if (match && match[1]) {
+                const instance = match[1];
+                const pid = parseFloat(values[index]);
+                if (!isNaN(pid)) {
+                    instanceToPid[instance] = pid;
+                }
+            }
+        });
+
+        headers.forEach((header, index) => {
+            const match = header.match(/\\Process\(([^)]+)\)\\IO Data Bytes\/sec/);
+            if (match && match[1]) {
+                const instance = match[1];
+                const pid = instanceToPid[instance];
+                if (pid !== undefined) {
+                    const val = parseFloat(values[index]);
+                    if (!isNaN(val)) {
+                        diskUsage[pid] = (diskUsage[pid] || 0) + val;
+                    }
+                }
+            }
+        });
+
+        return diskUsage;
+    } catch (error) {
+        console.error('Error getting Disk usage:', error.message);
+        return {};
+    }
+}
+
 async function getGpuProcessUsage() {
     try {
         // Limit to 1 sample, CSV output
@@ -93,13 +160,14 @@ async function getGpuProcessUsage() {
 
 async function getSlowStats() {
     try {
-        const [cpu, fsSize, graphics, processes, gpuLoad, gpuProcessUsage, blockDevices] = await Promise.all([
+        const [cpu, fsSize, graphics, processes, gpuLoad, gpuProcessUsage, diskProcessUsage, blockDevices] = await Promise.all([
             si.cpu(),
             si.fsSize(),
             si.graphics(),
             si.processes(),
             getGpuLoad(),
             getGpuProcessUsage(),
+            getDiskProcessUsage(),
             si.blockDevices()
         ]);
 
@@ -140,7 +208,8 @@ async function getSlowStats() {
                     .filter(p => p.name !== 'System Idle Process' && p.name !== 'Idle')
                     .map(p => ({
                         ...p,
-                        gpu: gpuProcessUsage[p.pid] || 0
+                        gpu: gpuProcessUsage[p.pid] || 0,
+                        disk: diskProcessUsage[p.pid] || 0
                     }))
                     .sort((a, b) => b.cpu - a.cpu)
                     .slice(0, 20)
@@ -149,8 +218,8 @@ async function getSlowStats() {
                         name: p.name,
                         cpu: p.cpu,
                         mem: p.mem,
-                        user: p.user,
-                        gpu: p.gpu
+                        gpu: p.gpu,
+                        disk: p.disk
                     })),
                 total: processes.all,
                 running: processes.running,
