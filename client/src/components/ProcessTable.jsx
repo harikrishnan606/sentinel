@@ -1,18 +1,54 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import axios from 'axios';
+
+function KillButton({ pid, name, onKill }) {
+    const [confirming, setConfirming] = useState(false);
+
+    useEffect(() => {
+        if (confirming) {
+            const timer = setTimeout(() => setConfirming(false), 3000);
+            return () => clearTimeout(timer);
+        }
+    }, [confirming]);
+
+    const handleClick = () => {
+        if (confirming) {
+            onKill(pid, name);
+            setConfirming(false);
+        } else {
+            setConfirming(true);
+        }
+    };
+
+    return (
+        <button
+            className="btn"
+            style={{
+                padding: '0.25rem 0.5rem',
+                fontSize: '0.75rem',
+                backgroundColor: confirming ? 'var(--danger)' : 'var(--bg-secondary)',
+                color: confirming ? '#fff' : 'var(--text-primary)',
+                border: confirming ? 'none' : '1px solid var(--border)',
+                transition: 'all 0.2s ease',
+                minWidth: '60px'
+            }}
+            onClick={handleClick}
+        >
+            {confirming ? 'Confirm?' : 'Kill'}
+        </button>
+    );
+}
 
 function ProcessTable({ processes }) {
     const [searchTerm, setSearchTerm] = useState('');
     const [sortConfig, setSortConfig] = useState({ key: 'cpu', direction: 'descending' });
 
     const handleKill = async (pid, name) => {
-        if (window.confirm(`Are you sure you want to kill process ${name} (PID: ${pid})?`)) {
-            try {
-                await axios.post(`http://${window.location.hostname}:3001/api/process/kill`, { pid });
-                alert(`Process ${name} terminated.`);
-            } catch (error) {
-                alert(`Failed to kill process: ${error.response?.data?.error || error.message}`);
-            }
+        try {
+            await axios.post(`http://${window.location.hostname}:3001/api/process/kill`, { pid });
+            console.log(`Process ${name} terminated.`);
+        } catch (error) {
+            console.error(`Failed to kill process: ${error.response?.data?.error || error.message}`);
         }
     };
 
@@ -78,13 +114,7 @@ function ProcessTable({ processes }) {
                                 <td>{p.mem.toFixed(1)}%</td>
                                 <td>{p.gpu ? p.gpu.toFixed(1) : '0.0'}%</td>
                                 <td>
-                                    <button
-                                        className="btn btn-danger"
-                                        style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem' }}
-                                        onClick={() => handleKill(p.pid, p.name)}
-                                    >
-                                        Kill
-                                    </button>
+                                    <KillButton pid={p.pid} name={p.name} onKill={handleKill} />
                                 </td>
                             </tr>
                         ))}
