@@ -7,6 +7,13 @@ const socket = io(`http://${window.location.hostname}:3001`);
 function HistoryCharts() {
     const [data, setData] = useState([]);
     const [totalRam, setTotalRam] = useState(0);
+    const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+
+    useEffect(() => {
+        const handleResize = () => setIsMobile(window.innerWidth < 768);
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
+    }, []);
 
     useEffect(() => {
         socket.on('history', (history) => {
@@ -49,10 +56,14 @@ function HistoryCharts() {
         };
     }, []);
 
+    const chartMargin = isMobile
+        ? { top: 10, right: 0, left: -20, bottom: 0 }
+        : { top: 20, right: 30, left: 20, bottom: 40 };
+
     return (
-        <div style={{ height: '350px', width: '100%' }}>
+        <div style={{ height: '100%', width: '100%', minHeight: '350px' }}>
             <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={data} margin={{ top: 20, right: 30, left: 20, bottom: 40 }}>
+                <LineChart data={data} margin={chartMargin}>
                     <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
                     <XAxis
                         dataKey="time"
@@ -107,9 +118,9 @@ function HistoryCharts() {
                         name="RAM"
                         isAnimationActive={false}
                     />
-                </LineChart>
-            </ResponsiveContainer>
-        </div>
+                </LineChart >
+            </ResponsiveContainer >
+        </div >
     );
 }
 

@@ -106,11 +106,13 @@ function Dashboard({ metrics }) {
             </div>
 
             <div className="dashboard-grid dashboard-split">
-                <div className="card">
+                <div className="card" style={{ display: 'flex', flexDirection: 'column' }}>
                     <div className="card-header">
                         <div className="card-title">System History</div>
                     </div>
-                    <HistoryCharts />
+                    <div style={{ flex: 1, minHeight: 0 }}>
+                        <HistoryCharts />
+                    </div>
                 </div>
                 <div className="card">
                     <div className="card-header">
