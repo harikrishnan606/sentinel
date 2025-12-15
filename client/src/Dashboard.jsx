@@ -88,6 +88,13 @@ function Dashboard({ metrics }) {
                     onConfirm={handlePowerAction}
                 />
                 <PowerButton
+                    action="restart"
+                    label="Restart"
+                    color="var(--success)"
+                    textColor="#fff"
+                    onConfirm={handlePowerAction}
+                />
+                <PowerButton
                     action="shutdown"
                     label="Shutdown"
                     color="var(--danger)"
