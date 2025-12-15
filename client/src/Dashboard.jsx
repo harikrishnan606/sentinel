@@ -59,7 +59,7 @@ function Dashboard({ metrics }) {
     const handlePowerAction = async (action) => {
         try {
             console.log(`Sending power action: ${action}`);
-            const response = await axios.post(`http://${window.location.hostname}:3001/api/system/power`, { action });
+            const response = await axios.post('/api/system/power', { action });
             console.log('Power action response:', response.data);
             alert(`Success: ${response.data.message}`);
         } catch (error) {

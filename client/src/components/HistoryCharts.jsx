@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import io from 'socket.io-client';
 
-const socket = io(`http://${window.location.hostname}:3001`);
+const socket = io();
 
 function HistoryCharts() {
     const [data, setData] = useState([]);

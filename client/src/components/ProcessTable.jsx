@@ -45,7 +45,7 @@ function ProcessTable({ processes }) {
 
     const handleKill = async (pid, name) => {
         try {
-            await axios.post(`http://${window.location.hostname}:3001/api/process/kill`, { pid });
+            await axios.post('/api/process/kill', { pid });
             console.log(`Process ${name} terminated.`);
         } catch (error) {
             console.error(`Failed to kill process: ${error.response?.data?.error || error.message}`);

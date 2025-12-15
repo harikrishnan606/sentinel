@@ -5,7 +5,7 @@ import './index.css';
 // Components (we will create these next)
 import Dashboard from './Dashboard';
 
-const socket = io(`http://${window.location.hostname}:3001`);
+const socket = io();
 
 function App() {
   const [metrics, setMetrics] = useState(null);
