@@ -11,3 +11,6 @@ coverage/
 *.db
 *.sqlite
 *.sqlite-journal
+
+# Build Artifacts
+server/public/
