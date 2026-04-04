@@ -1,10 +1,10 @@
-const { getFastStats, getSlowStats } = require('./monitor');
+const { getFastStats, getSlowStats, getHardwareProcessUsage } = require('./monitor');
 const { saveMetrics, getHistory } = require('./db');
 
 let fastInterval;
 let slowInterval;
+let processInterval;
 
-// Cache to store the latest state
 let fullStats = {
     cpu: { load: 0, brand: 'Loading...', cores: 0, speed: 0, temp: {} },
     memory: { total: 0, used: 0, free: 0, active: 0 },
@@ -18,12 +18,10 @@ function setupSocket(io) {
     io.on('connection', (socket) => {
         console.log('Client connected');
 
-        // Send initial history
         getHistory(100, (data) => {
             socket.emit('history', data);
         });
 
-        // Send immediate current stats if available
         socket.emit('metrics', fullStats);
 
         socket.on('disconnect', () => {
@@ -31,12 +29,10 @@ function setupSocket(io) {
         });
     });
 
-    // Fast loop (1s) - CPU load, Memory, Network
     if (!fastInterval) {
         fastInterval = setInterval(async () => {
             const fast = await getFastStats();
             if (fast) {
-                // Merge fast stats into fullStats
                 fullStats.cpu.load = fast.cpu.load;
                 fullStats.memory = fast.memory;
                 fullStats.network = fast.network;
@@ -47,22 +43,34 @@ function setupSocket(io) {
         }, 1000);
     }
 
-    // Slow loop (5s) - Processes, Disk, Static Info
+    if (!processInterval) {
+        processInterval = setInterval(async () => {
+            const hw = await getHardwareProcessUsage();
+            if (hw) {
+                fullStats.processes.all = hw.processes;
+                fullStats.processes.total = hw.processes.length;
+                if (fullStats.gpu && fullStats.gpu.length > 0) {
+                    fullStats.gpu.forEach(g => g.load = hw.totalGpuLoad);
+                }
+            }
+        }, 2000);
+    }
+
     if (!slowInterval) {
-        // Run once immediately
         updateSlowStats();
-        slowInterval = setInterval(updateSlowStats, 5000);
+        slowInterval = setInterval(updateSlowStats, 15000);
     }
 }
 
 async function updateSlowStats() {
     const slow = await getSlowStats();
     if (slow) {
-        // Merge slow stats
-        fullStats.cpu = { ...fullStats.cpu, ...slow.cpu }; // Keep load, update static
+        fullStats.cpu = { ...fullStats.cpu, ...slow.cpu };
         fullStats.storage = slow.storage;
+        
+        const currentLoad = (fullStats.gpu && fullStats.gpu[0]) ? fullStats.gpu[0].load : 0;
         fullStats.gpu = slow.gpu;
-        fullStats.processes = slow.processes;
+        if (fullStats.gpu) fullStats.gpu.forEach(g => g.load = currentLoad);
     }
 }
 

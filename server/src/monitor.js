@@ -2,6 +2,8 @@ const si = require('systeminformation');
 const { exec } = require('child_process');
 const util = require('util');
 const execPromise = util.promisify(exec);
+const os = require('os');
+const totalMem = os.totalmem();
 
 let cachedGraphics = null;
 
@@ -40,60 +42,88 @@ async function getFastStats() {
 
 async function getHardwareProcessUsage() {
     try {
-        // Fetch GPU Utilization and Disk IO plus Process IDs in one pass
-        const { stdout } = await execPromise('typeperf "\\Process(*)\\ID Process" "\\Process(*)\\IO Data Bytes/sec" "\\GPU Engine(*)\\Utilization Percentage" -sc 1 -y', { maxBuffer: 1024 * 1024 * 10 });
+        const { stdout } = await execPromise('typeperf "\\Process(*)\\ID Process" "\\Process(*)\\% Processor Time" "\\Process(*)\\Working Set - Private" "\\Process(*)\\IO Data Bytes/sec" "\\GPU Engine(*)\\Utilization Percentage" -sc 1 -y', { maxBuffer: 1024 * 1024 * 10 });
         const lines = stdout.trim().split('\n');
-        if (lines.length < 2) return { diskUsage: {}, gpuUsage: {}, totalGpuLoad: 0 };
+        if (lines.length < 2) return { processes: [], totalGpuLoad: 0 };
 
         const headers = lines[0].split(',').map(h => h.replace(/"/g, ''));
         const values = lines[1].split(',').map(v => v.replace(/"/g, ''));
 
-        const diskUsage = {};
-        const gpuUsage = {};
+        const processMap = {};
         let totalGpuLoad = 0;
 
-        // Pass 1: Maps Instances to Process IDs
+        // Pass 1
         const instanceToPid = {};
         headers.forEach((header, index) => {
             const match = header.match(/\\Process\(([^)]+)\)\\ID Process/);
-            if (match && match[1]) {
+            if (match && match[1] && match[1] !== '_Total' && match[1] !== 'Idle') {
                 const pid = parseFloat(values[index]);
-                if (!isNaN(pid)) {
-                    instanceToPid[match[1]] = pid;
+                if (!isNaN(pid) && pid > 0) {
+                    const rawName = match[1];
+                    const cleanName = rawName.split('#')[0];
+                    instanceToPid[rawName] = pid;
+                    
+                    if (!processMap[pid]) {
+                        processMap[pid] = {
+                            pid: pid,
+                            name: cleanName,
+                            cpu: 0,
+                            mem: 0,
+                            gpu: 0,
+                            disk: 0
+                        };
+                    }
                 }
             }
         });
 
-        // Pass 2: Extract IO Data and GPU Engine Util
+        // Pass 2
         headers.forEach((header, index) => {
-            // Disk IO
+            const cpuMatch = header.match(/\\Process\(([^)]+)\)\\\% Processor Time/);
+            if (cpuMatch && cpuMatch[1] && instanceToPid[cpuMatch[1]]) {
+                const pid = instanceToPid[cpuMatch[1]];
+                const val = parseFloat(values[index]);
+                if (!isNaN(val) && val >= 0) {
+                    processMap[pid].cpu += Math.min(val / os.cpus().length, 100);
+                }
+            }
+
+            const memMatch = header.match(/\\Process\(([^)]+)\)\\Working Set \- Private/);
+            if (memMatch && memMatch[1] && instanceToPid[memMatch[1]]) {
+                const pid = instanceToPid[memMatch[1]];
+                const val = parseFloat(values[index]);
+                if (!isNaN(val) && val >= 0) {
+                    processMap[pid].mem = (val / totalMem) * 100;
+                }
+            }
+
             const ioMatch = header.match(/\\Process\(([^)]+)\)\\IO Data Bytes\/sec/);
-            if (ioMatch && ioMatch[1]) {
+            if (ioMatch && ioMatch[1] && instanceToPid[ioMatch[1]]) {
                 const pid = instanceToPid[ioMatch[1]];
-                if (pid !== undefined) {
-                    const val = parseFloat(values[index]);
-                    if (!isNaN(val) && val > 0) {
-                        diskUsage[pid] = (diskUsage[pid] || 0) + val;
-                    }
+                const val = parseFloat(values[index]);
+                if (!isNaN(val) && val >= 0) {
+                    processMap[pid].disk += val;
                 }
             }
             
-            // GPU Util matches `pid_(\d+)_`
             const gpuMatch = header.match(/pid_(\d+)_/);
             if (gpuMatch && gpuMatch[1]) {
                 const pid = parseInt(gpuMatch[1], 10);
                 const val = parseFloat(values[index]);
                 if (!isNaN(val) && val > 0) {
-                    gpuUsage[pid] = (gpuUsage[pid] || 0) + val;
+                    if (processMap[pid]) processMap[pid].gpu += val;
                     totalGpuLoad += val;
                 }
             }
         });
 
-        return { diskUsage, gpuUsage, totalGpuLoad: Math.min(totalGpuLoad, 100) };
+        const allProcesses = Object.values(processMap)
+            .sort((a, b) => b.cpu - a.cpu)
+            .slice(0, 20);
+
+        return { processes: allProcesses, totalGpuLoad: Math.min(totalGpuLoad, 100) };
     } catch (error) {
-        // Failing silently to not disrupt normal reporting
-        return { diskUsage: {}, gpuUsage: {}, totalGpuLoad: 0 };
+        return { processes: [], totalGpuLoad: 0 };
     }
 }
 
@@ -103,17 +133,12 @@ async function getSlowStats() {
             cachedGraphics = await si.graphics();
         }
 
-        const [cpu, fsSize, processes, hwUsage, blockDevices] = await Promise.all([
+        const [cpu, fsSize, blockDevices] = await Promise.all([
             si.cpu(),
             si.fsSize(),
-            si.processes(),
-            getHardwareProcessUsage(),
             si.blockDevices()
         ]);
 
-        const { diskUsage, gpuUsage, totalGpuLoad } = hwUsage;
-
-        // Create a map of mount point -> label
         const driveLabels = {};
         blockDevices.forEach(device => {
             if (device.mount) {
@@ -143,31 +168,8 @@ async function getSlowStats() {
                 model: gpu.model,
                 vram: gpu.vram,
                 temperature: gpu.temperatureGpu,
-                load: totalGpuLoad
-            })),
-            processes: {
-                all: processes.list
-                    .filter(p => p.name !== 'System Idle Process' && p.name !== 'Idle')
-                    .map(p => ({
-                        ...p,
-                        gpu: gpuUsage[p.pid] || 0,
-                        disk: diskUsage[p.pid] || 0
-                    }))
-                    .sort((a, b) => b.cpu - a.cpu)
-                    .slice(0, 20)
-                    .map(p => ({
-                        pid: p.pid,
-                        name: p.name,
-                        cpu: p.cpu,
-                        mem: p.mem,
-                        gpu: p.gpu,
-                        disk: p.disk
-                    })),
-                total: processes.all,
-                running: processes.running,
-                blocked: processes.blocked,
-                sleeping: processes.sleeping
-            }
+                load: 0
+            }))
         };
     } catch (error) {
         console.error('Error gathering slow stats:', error);
@@ -175,4 +177,4 @@ async function getSlowStats() {
     }
 }
 
-module.exports = { getFastStats, getSlowStats };
+module.exports = { getFastStats, getHardwareProcessUsage, getSlowStats };
