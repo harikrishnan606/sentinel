@@ -86,12 +86,12 @@ A comprehensive view of the system's hardware, software, and logs.
 | Requirement | Description |
 | :--- | :--- |
 | **Security** | All API endpoints that perform mutative actions (kill process, shutdown) must be secured and require user authentication. The web server should employ basic security best practices (e.g., use HTTPS). |
-| **Performance** | The backend service should have a low performance overhead on the host system. The frontend should load quickly and feel responsive, even with real-time data updates. |
+| **Performance** | The backend service MUST have a virtually zero-percent performance overhead on the host system. On Windows environments, heavy metrics (Top Processes, Network IO) are gathered using raw `typeperf` child processes and native `os` bindings rather than higher-level WMI bridges to entirely prevent event loop blocking and CPU footprint crashes. |
 | **Alerting** | Users should be able to configure basic alerts (e.g., "notify me if CPU usage is over 90% for 5 minutes"). Notifications will initially be displayed within the web app. |
 
 ## 6. Technology Stack
 
-*   **Backend:** Node.js with Express.js
-*   **Frontend:** React
-*   **Real-time Communication:** WebSockets
-*   **Database:** InfluxDB or SQLite for historical data
+*   **Backend:** Node.js with Express.js (incorporating `systeminformation` mixed carefully with native OS bindings and `typeperf` CLI executions for zero-overhead polling).
+*   **Frontend:** React (Vite)
+*   **Real-time Communication:** WebSockets (`socket.io`)
+*   **Database:** SQLite for historical offline storage
