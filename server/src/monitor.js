@@ -9,30 +9,57 @@ let cachedGraphics = null;
 
 async function getFastStats() {
     try {
-        const [currentLoad, mem, networkStats] = await Promise.all([
+        const [currentLoad, networkStdout] = await Promise.all([
             si.currentLoad(),
-            si.mem(),
-            si.networkStats()
+            execPromise('typeperf "\\Network Interface(*)\\Bytes Received/sec" "\\Network Interface(*)\\Bytes Sent/sec" -sc 1').then(res => res.stdout).catch(() => '')
         ]);
+
+        const freeMem = os.freemem();
+        const usedMem = totalMem - freeMem;
+
+        let networkStats = [];
+        if (networkStdout) {
+            const lines = networkStdout.trim().split('\n');
+            if (lines.length >= 2) {
+                const headers = lines[0].split(',').map(h => h.replace(/"/g, ''));
+                const values = lines[1].split(',').map(v => v.replace(/"/g, ''));
+                
+                let rxTotal = 0;
+                let txTotal = 0;
+
+                headers.forEach((header, i) => {
+                    if (header.includes('Bytes Received/sec')) {
+                        const val = parseFloat(values[i]);
+                        if (!isNaN(val) && val >= 0) rxTotal += val;
+                    }
+                    if (header.includes('Bytes Sent/sec')) {
+                        const val = parseFloat(values[i]);
+                        if (!isNaN(val) && val >= 0) txTotal += val;
+                    }
+                });
+
+                networkStats = [{
+                    iface: 'All Interfaces',
+                    ip4: '',
+                    rx_sec: rxTotal,
+                    tx_sec: txTotal,
+                    operstate: 'up'
+                }];
+            }
+        }
 
         return {
             cpu: {
                 load: currentLoad.currentLoad,
             },
             memory: {
-                total: mem.total,
-                free: mem.free,
-                used: mem.total - mem.available, // Match Task Manager
-                active: mem.total - mem.available, // Use same logic for consistency
-                available: mem.available
+                total: totalMem,
+                free: freeMem,
+                used: usedMem,
+                active: usedMem,
+                available: freeMem
             },
-            network: networkStats.map(iface => ({
-                iface: iface.iface,
-                ip4: iface.ip4,
-                rx_sec: iface.rx_sec,
-                tx_sec: iface.tx_sec,
-                operstate: iface.operstate
-            }))
+            network: networkStats
         };
     } catch (error) {
         console.error('Error gathering fast stats:', error);
