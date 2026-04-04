@@ -1,4 +1,9 @@
 const si = require('systeminformation');
+const { exec } = require('child_process');
+const util = require('util');
+const execPromise = util.promisify(exec);
+
+let cachedGraphics = null;
 
 async function getFastStats() {
     try {
@@ -8,25 +13,14 @@ async function getFastStats() {
             si.networkStats()
         ]);
 
-        let load = currentLoad.currentLoad;
-
-        // Fallback for Windows reporting 100% load incorrectly
-        if (load > 99 && process.platform === 'win32') {
-            const processes = await si.processes();
-            const idleProcess = processes.list.find(p => p.name === 'System Idle Process' || p.name === 'Idle');
-            if (idleProcess) {
-                load = 100 - idleProcess.cpu;
-            }
-        }
-
         return {
             cpu: {
-                load: load,
+                load: currentLoad.currentLoad,
             },
             memory: {
                 total: mem.total,
                 free: mem.free,
-                used: mem.total - mem.available, // Match Task Manager (Total - Available)
+                used: mem.total - mem.available, // Match Task Manager
                 active: mem.total - mem.available, // Use same logic for consistency
                 available: mem.available
             },
@@ -44,132 +38,80 @@ async function getFastStats() {
     }
 }
 
-const { exec } = require('child_process');
-const util = require('util');
-const execPromise = util.promisify(exec);
-
-async function getGpuLoad() {
+async function getHardwareProcessUsage() {
     try {
-        const cmd = 'powershell "(Get-Counter \\"\\GPU Engine(*)\\Utilization Percentage\\").CounterSamples | Measure-Object -Property CookedValue -Sum | Select-Object -ExpandProperty Sum"';
-        const { stdout } = await execPromise(cmd);
-        const load = parseFloat(stdout.trim());
-        return isNaN(load) ? 0 : load;
-    } catch (error) {
-        console.error('Error getting GPU load:', error.message);
-        return 0;
-    }
-}
-
-
-
-async function getDiskProcessUsage() {
-    try {
-        // Fetch both ID Process and IO Data Bytes/sec
-        // We need a larger buffer for many processes
-        const { stdout } = await execPromise('typeperf "\\Process(*)\\ID Process" "\\Process(*)\\IO Data Bytes/sec" -sc 1 -y', { maxBuffer: 1024 * 1024 * 10 });
+        // Fetch GPU Utilization and Disk IO plus Process IDs in one pass
+        const { stdout } = await execPromise('typeperf "\\Process(*)\\ID Process" "\\Process(*)\\IO Data Bytes/sec" "\\GPU Engine(*)\\Utilization Percentage" -sc 1 -y', { maxBuffer: 1024 * 1024 * 10 });
         const lines = stdout.trim().split('\n');
-        if (lines.length < 2) return {};
+        if (lines.length < 2) return { diskUsage: {}, gpuUsage: {}, totalGpuLoad: 0 };
 
         const headers = lines[0].split(',').map(h => h.replace(/"/g, ''));
         const values = lines[1].split(',').map(v => v.replace(/"/g, ''));
 
-        const pidMap = {}; // Index -> PID
-        const diskUsage = {}; // PID -> Bytes/sec
+        const diskUsage = {};
+        const gpuUsage = {};
+        let totalGpuLoad = 0;
 
-        // First pass: Find PIDs
-        headers.forEach((header, index) => {
-            if (header.includes('\\ID Process')) {
-                const val = parseFloat(values[index]);
-                if (!isNaN(val)) {
-                    pidMap[index] = val; // Store PID at this index
-                }
-            }
-        });
-
-        // Second pass: Find IO Data and map to PID
-        // The counters are usually returned in blocks. 
-        // We need to match the instance name.
-        // A safer way is to parse the instance name from the header.
-
-        // Let's build a map of InstanceName -> PID
+        // Pass 1: Maps Instances to Process IDs
         const instanceToPid = {};
-
         headers.forEach((header, index) => {
-            // Header format: \\Machine\Process(Instance)\Counter
             const match = header.match(/\\Process\(([^)]+)\)\\ID Process/);
             if (match && match[1]) {
-                const instance = match[1];
                 const pid = parseFloat(values[index]);
                 if (!isNaN(pid)) {
-                    instanceToPid[instance] = pid;
+                    instanceToPid[match[1]] = pid;
                 }
             }
         });
 
+        // Pass 2: Extract IO Data and GPU Engine Util
         headers.forEach((header, index) => {
-            const match = header.match(/\\Process\(([^)]+)\)\\IO Data Bytes\/sec/);
-            if (match && match[1]) {
-                const instance = match[1];
-                const pid = instanceToPid[instance];
+            // Disk IO
+            const ioMatch = header.match(/\\Process\(([^)]+)\)\\IO Data Bytes\/sec/);
+            if (ioMatch && ioMatch[1]) {
+                const pid = instanceToPid[ioMatch[1]];
                 if (pid !== undefined) {
                     const val = parseFloat(values[index]);
-                    if (!isNaN(val)) {
+                    if (!isNaN(val) && val > 0) {
                         diskUsage[pid] = (diskUsage[pid] || 0) + val;
                     }
                 }
             }
-        });
-
-        return diskUsage;
-    } catch (error) {
-        console.error('Error getting Disk usage:', error.message);
-        return {};
-    }
-}
-
-async function getGpuProcessUsage() {
-    try {
-        // Limit to 1 sample, CSV output
-        const { stdout } = await execPromise('typeperf "\\GPU Engine(*)\\Utilization Percentage" -sc 1 -y');
-        const lines = stdout.trim().split('\n');
-        if (lines.length < 2) return {};
-
-        const headers = lines[0].split(',').map(h => h.replace(/"/g, ''));
-        const values = lines[1].split(',').map(v => v.replace(/"/g, ''));
-
-        const processUsage = {};
-
-        headers.forEach((header, index) => {
-            // Header format: \GPU Engine(pid_1234_...)\Utilization Percentage
-            const match = header.match(/pid_(\d+)_/);
-            if (match && match[1]) {
-                const pid = parseInt(match[1]);
+            
+            // GPU Util matches `pid_(\d+)_`
+            const gpuMatch = header.match(/pid_(\d+)_/);
+            if (gpuMatch && gpuMatch[1]) {
+                const pid = parseInt(gpuMatch[1], 10);
                 const val = parseFloat(values[index]);
-                if (!isNaN(val)) {
-                    processUsage[pid] = (processUsage[pid] || 0) + val;
+                if (!isNaN(val) && val > 0) {
+                    gpuUsage[pid] = (gpuUsage[pid] || 0) + val;
+                    totalGpuLoad += val;
                 }
             }
         });
 
-        return processUsage;
+        return { diskUsage, gpuUsage, totalGpuLoad: Math.min(totalGpuLoad, 100) };
     } catch (error) {
-        // typeperf might fail or be slow, return empty object gracefully
-        return {};
+        // Failing silently to not disrupt normal reporting
+        return { diskUsage: {}, gpuUsage: {}, totalGpuLoad: 0 };
     }
 }
 
 async function getSlowStats() {
     try {
-        const [cpu, fsSize, graphics, processes, gpuLoad, gpuProcessUsage, diskProcessUsage, blockDevices] = await Promise.all([
+        if (!cachedGraphics) {
+            cachedGraphics = await si.graphics();
+        }
+
+        const [cpu, fsSize, processes, hwUsage, blockDevices] = await Promise.all([
             si.cpu(),
             si.fsSize(),
-            si.graphics(),
             si.processes(),
-            getGpuLoad(),
-            getGpuProcessUsage(),
-            getDiskProcessUsage(),
+            getHardwareProcessUsage(),
             si.blockDevices()
         ]);
+
+        const { diskUsage, gpuUsage, totalGpuLoad } = hwUsage;
 
         // Create a map of mount point -> label
         const driveLabels = {};
@@ -196,20 +138,20 @@ async function getSlowStats() {
                 mount: drive.mount,
                 label: driveLabels[drive.mount] || 'Local Disk'
             })),
-            gpu: graphics.controllers.map(gpu => ({
+            gpu: cachedGraphics.controllers.map(gpu => ({
                 vendor: gpu.vendor,
                 model: gpu.model,
                 vram: gpu.vram,
                 temperature: gpu.temperatureGpu,
-                load: gpuLoad // Assign total load to all controllers for now
+                load: totalGpuLoad
             })),
             processes: {
                 all: processes.list
                     .filter(p => p.name !== 'System Idle Process' && p.name !== 'Idle')
                     .map(p => ({
                         ...p,
-                        gpu: gpuProcessUsage[p.pid] || 0,
-                        disk: diskProcessUsage[p.pid] || 0
+                        gpu: gpuUsage[p.pid] || 0,
+                        disk: diskUsage[p.pid] || 0
                     }))
                     .sort((a, b) => b.cpu - a.cpu)
                     .slice(0, 20)
