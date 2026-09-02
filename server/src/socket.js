@@ -24,54 +24,78 @@ function setupSocket(io) {
 
         socket.emit('metrics', fullStats);
 
+        socket.on('getHistory', (limit) => {
+            getHistory(limit || 60, (data) => {
+                socket.emit('history', data);
+            });
+        });
+
         socket.on('disconnect', () => {
             console.log('Client disconnected');
         });
     });
 
     if (!fastInterval) {
+        let isFastRunning = false;
         fastInterval = setInterval(async () => {
-            const fast = await getFastStats();
-            if (fast) {
-                fullStats.cpu.load = fast.cpu.load;
-                fullStats.memory = fast.memory;
-                fullStats.network = fast.network;
+            if (isFastRunning) return;
+            isFastRunning = true;
+            try {
+                const fast = await getFastStats();
+                if (fast) {
+                    fullStats.cpu.load = fast.cpu.load;
+                    fullStats.memory = fast.memory;
+                    fullStats.network = fast.network;
 
-                io.emit('metrics', fullStats);
-                saveMetrics(fast.cpu.load, fast.memory);
+                    io.emit('metrics', fullStats);
+                    saveMetrics(fast.cpu.load, fast.memory);
+                }
+            } catch (err) {
+                console.error('Error in fastInterval:', err);
+            } finally {
+                isFastRunning = false;
             }
         }, 1000);
     }
 
     if (!processInterval) {
+        let isProcessRunning = false;
         processInterval = setInterval(async () => {
-            const [hw, nvidiaStats] = await Promise.all([
-                getHardwareProcessUsage(),
-                getNvidiaStats()
-            ]);
+            if (isProcessRunning) return;
+            isProcessRunning = true;
+            try {
+                const [hw, nvidiaStats] = await Promise.all([
+                    getHardwareProcessUsage(),
+                    getNvidiaStats()
+                ]);
 
-            if (hw) {
-                fullStats.processes.all = hw.processes;
-                fullStats.processes.total = hw.processes.length;
+                if (hw) {
+                    fullStats.processes.all = hw.processes;
+                    fullStats.processes.total = hw.processes.length;
 
-                const dedicatedStats = (nvidiaStats && nvidiaStats[0]) ? nvidiaStats[0] : null;
+                    const dedicatedStats = (nvidiaStats && nvidiaStats[0]) ? nvidiaStats[0] : null;
 
-                if (fullStats.gpu && fullStats.gpu.length > 0) {
-                    fullStats.gpu.forEach(g => {
-                        const isDedicated = g.isDedicated || g.vendor?.toLowerCase().includes('nvidia');
-                        if (isDedicated && dedicatedStats) {
-                            g.load = dedicatedStats.load;
-                            g.vramUsed = dedicatedStats.memoryUsed;
-                            g.vram = dedicatedStats.memoryTotal || g.vram;
-                            if (dedicatedStats.temperature) {
-                                g.temperature = dedicatedStats.temperature;
+                    if (fullStats.gpu && fullStats.gpu.length > 0) {
+                        fullStats.gpu.forEach(g => {
+                            const isDedicated = g.isDedicated || g.vendor?.toLowerCase().includes('nvidia');
+                            if (isDedicated && dedicatedStats) {
+                                g.load = dedicatedStats.load;
+                                g.vramUsed = dedicatedStats.memoryUsed;
+                                g.vram = dedicatedStats.memoryTotal || g.vram;
+                                if (dedicatedStats.temperature) {
+                                    g.temperature = dedicatedStats.temperature;
+                                }
+                            } else if (!isDedicated) {
+                                const dedicatedLoad = dedicatedStats ? dedicatedStats.load : 0;
+                                g.load = Math.max(0, Math.min(100, hw.totalGpuLoad - dedicatedLoad));
                             }
-                        } else if (!isDedicated) {
-                            const dedicatedLoad = dedicatedStats ? dedicatedStats.load : 0;
-                            g.load = Math.max(0, Math.min(100, hw.totalGpuLoad - dedicatedLoad));
-                        }
-                    });
+                        });
+                    }
                 }
+            } catch (err) {
+                console.error('Error in processInterval:', err);
+            } finally {
+                isProcessRunning = false;
             }
         }, 2000);
     }

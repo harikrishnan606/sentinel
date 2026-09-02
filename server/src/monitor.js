@@ -6,51 +6,85 @@ const os = require('os');
 const totalMem = os.totalmem();
 
 let cachedGraphics = null;
+let lastCpuTimes = null;
+let smoothedCpuLoad = 0;
+
+function getCpuUsage() {
+    const cpus = os.cpus();
+    let totalIdle = 0;
+    let totalTick = 0;
+    for (let i = 0; i < cpus.length; i++) {
+        const cpu = cpus[i];
+        for (const type in cpu.times) {
+            totalTick += cpu.times[type];
+        }
+        totalIdle += cpu.times.idle;
+    }
+
+    if (!lastCpuTimes) {
+        lastCpuTimes = { idle: totalIdle, total: totalTick };
+        return 0;
+    }
+
+    const idleDiff = totalIdle - lastCpuTimes.idle;
+    const totalDiff = totalTick - lastCpuTimes.total;
+    lastCpuTimes = { idle: totalIdle, total: totalTick };
+
+    if (totalDiff <= 0) return smoothedCpuLoad;
+    const rawUsage = Math.max(0, Math.min(100, 100 - (100 * idleDiff / totalDiff)));
+    // Exponential moving average (alpha = 0.7) for smooth yet responsive readings
+    smoothedCpuLoad = smoothedCpuLoad === 0 ? rawUsage : (0.7 * rawUsage + 0.3 * smoothedCpuLoad);
+    return smoothedCpuLoad;
+}
+
+let lastNetBytes = null;
+
+function getNetworkThroughput() {
+    return new Promise((resolve) => {
+        exec('netstat -e', { timeout: 1000 }, (err, stdout) => {
+            if (err || !stdout) {
+                return resolve([{ iface: 'All Interfaces', ip4: '', rx_sec: 0, tx_sec: 0, operstate: 'up' }]);
+            }
+            const bytesLine = stdout.split('\n').find(l => l.includes('Bytes'));
+            if (!bytesLine) {
+                return resolve([{ iface: 'All Interfaces', ip4: '', rx_sec: 0, tx_sec: 0, operstate: 'up' }]);
+            }
+
+            const nums = bytesLine.match(/\d+/g);
+            if (!nums || nums.length < 2) {
+                return resolve([{ iface: 'All Interfaces', ip4: '', rx_sec: 0, tx_sec: 0, operstate: 'up' }]);
+            }
+
+            const rx = parseInt(nums[0], 10);
+            const tx = parseInt(nums[1], 10);
+            const now = Date.now();
+
+            if (!lastNetBytes) {
+                lastNetBytes = { rx, tx, time: now };
+                return resolve([{ iface: 'All Interfaces', ip4: '', rx_sec: 0, tx_sec: 0, operstate: 'up' }]);
+            }
+
+            const dt = (now - lastNetBytes.time) / 1000;
+            const rxSec = dt > 0 ? Math.max(0, (rx - lastNetBytes.rx) / dt) : 0;
+            const txSec = dt > 0 ? Math.max(0, (tx - lastNetBytes.tx) / dt) : 0;
+            lastNetBytes = { rx, tx, time: now };
+
+            resolve([{ iface: 'All Interfaces', ip4: '', rx_sec: rxSec, tx_sec: txSec, operstate: 'up' }]);
+        });
+    });
+}
 
 async function getFastStats() {
     try {
-        const [currentLoad, networkStdout] = await Promise.all([
-            si.currentLoad(),
-            execPromise('typeperf "\\Network Interface(*)\\Bytes Received/sec" "\\Network Interface(*)\\Bytes Sent/sec" -sc 1').then(res => res.stdout).catch(() => '')
-        ]);
+        const cpuLoad = getCpuUsage();
+        const networkStats = await getNetworkThroughput();
 
         const freeMem = os.freemem();
         const usedMem = totalMem - freeMem;
 
-        let networkStats = [];
-        if (networkStdout) {
-            const lines = networkStdout.trim().split('\n');
-            if (lines.length >= 2) {
-                const headers = lines[0].split(',').map(h => h.replace(/"/g, ''));
-                const values = lines[1].split(',').map(v => v.replace(/"/g, ''));
-                
-                let rxTotal = 0;
-                let txTotal = 0;
-
-                headers.forEach((header, i) => {
-                    if (header.includes('Bytes Received/sec')) {
-                        const val = parseFloat(values[i]);
-                        if (!isNaN(val) && val >= 0) rxTotal += val;
-                    }
-                    if (header.includes('Bytes Sent/sec')) {
-                        const val = parseFloat(values[i]);
-                        if (!isNaN(val) && val >= 0) txTotal += val;
-                    }
-                });
-
-                networkStats = [{
-                    iface: 'All Interfaces',
-                    ip4: '',
-                    rx_sec: rxTotal,
-                    tx_sec: txTotal,
-                    operstate: 'up'
-                }];
-            }
-        }
-
         return {
             cpu: {
-                load: currentLoad.currentLoad,
+                load: cpuLoad,
             },
             memory: {
                 total: totalMem,

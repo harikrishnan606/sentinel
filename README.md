@@ -155,6 +155,7 @@ Once running, open your web browser and navigate to:
 
 | Method | Endpoint | Description |
 | :--- | :--- | :--- |
+| `GET` | `/api/history` | Returns recent historical telemetry points from SQLite (`?limit=60`). |
 | `GET` | `/api/shortcuts` | Returns the parsed `shortcuts.json` array (auto-creates from template if absent). |
 | `GET` | `/api/shortcuts/status` | Tests TCP/HTTP connectivity for all configured shortcuts and returns online/offline status and latency. |
 | `POST` | `/api/process/kill` | Terminates a process by numeric `pid` (`{ "pid": 1234 }`). |

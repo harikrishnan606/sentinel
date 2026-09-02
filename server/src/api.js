@@ -5,6 +5,7 @@ const { exec } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const net = require('net');
+const { getHistory } = require('./db');
 
 function checkServiceStatus(urlStr) {
     return new Promise((resolve) => {
@@ -93,6 +94,13 @@ const DEFAULT_SHORTCUTS = [
         icon: 'netdata'
     }
 ];
+
+router.get('/history', (req, res) => {
+    const limit = parseInt(req.query.limit, 10) || 60;
+    getHistory(Math.min(limit, 300), (rows) => {
+        res.json(rows);
+    });
+});
 
 router.get('/shortcuts', (req, res) => {
     const shortcutsPath = path.resolve(__dirname, '../shortcuts.json');
