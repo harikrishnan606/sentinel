@@ -154,6 +154,31 @@ async function getHardwareProcessUsage() {
     }
 }
 
+let hasNvidiaSmi = null;
+
+async function getNvidiaStats() {
+    if (hasNvidiaSmi === false) return null;
+    try {
+        const { stdout } = await execPromise('nvidia-smi --query-gpu=index,name,utilization.gpu,memory.used,memory.total,temperature.gpu --format=csv,noheader,nounits');
+        hasNvidiaSmi = true;
+        const lines = stdout.trim().split('\n').filter(Boolean);
+        return lines.map(line => {
+            const [idx, name, util, memUsed, memTotal, temp] = line.split(',').map(s => s.trim());
+            return {
+                index: parseInt(idx, 10),
+                name,
+                load: parseFloat(util) || 0,
+                memoryUsed: parseFloat(memUsed) || 0,
+                memoryTotal: parseFloat(memTotal) || 0,
+                temperature: parseFloat(temp) || null
+            };
+        });
+    } catch {
+        hasNvidiaSmi = false;
+        return null;
+    }
+}
+
 async function getSlowStats() {
     try {
         if (!cachedGraphics) {
@@ -190,13 +215,20 @@ async function getSlowStats() {
                 mount: drive.mount,
                 label: driveLabels[drive.mount] || 'Local Disk'
             })),
-            gpu: cachedGraphics.controllers.map(gpu => ({
-                vendor: gpu.vendor,
-                model: gpu.model,
-                vram: gpu.vram,
-                temperature: gpu.temperatureGpu,
-                load: 0
-            }))
+            gpu: (cachedGraphics.controllers || [])
+                .filter(gpu => gpu.vendor && !gpu.vendor.includes('Microsoft') && gpu.model && !gpu.model.includes('Remote Display'))
+                .map(gpu => {
+                    const isDedicated = gpu.vendor?.toLowerCase().includes('nvidia') || (gpu.vram && gpu.vram > 2048) || false;
+                    return {
+                        vendor: gpu.vendor,
+                        model: gpu.model,
+                        vram: gpu.vram,
+                        temperature: gpu.temperatureGpu || null,
+                        load: 0,
+                        isDedicated,
+                        type: isDedicated ? 'Dedicated' : 'Integrated'
+                    };
+                })
         };
     } catch (error) {
         console.error('Error gathering slow stats:', error);
@@ -204,4 +236,4 @@ async function getSlowStats() {
     }
 }
 
-module.exports = { getFastStats, getHardwareProcessUsage, getSlowStats };
+module.exports = { getFastStats, getHardwareProcessUsage, getSlowStats, getNvidiaStats };

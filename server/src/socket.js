@@ -1,4 +1,4 @@
-const { getFastStats, getSlowStats, getHardwareProcessUsage } = require('./monitor');
+const { getFastStats, getSlowStats, getHardwareProcessUsage, getNvidiaStats } = require('./monitor');
 const { saveMetrics, getHistory } = require('./db');
 
 let fastInterval;
@@ -45,12 +45,32 @@ function setupSocket(io) {
 
     if (!processInterval) {
         processInterval = setInterval(async () => {
-            const hw = await getHardwareProcessUsage();
+            const [hw, nvidiaStats] = await Promise.all([
+                getHardwareProcessUsage(),
+                getNvidiaStats()
+            ]);
+
             if (hw) {
                 fullStats.processes.all = hw.processes;
                 fullStats.processes.total = hw.processes.length;
+
+                const dedicatedStats = (nvidiaStats && nvidiaStats[0]) ? nvidiaStats[0] : null;
+
                 if (fullStats.gpu && fullStats.gpu.length > 0) {
-                    fullStats.gpu.forEach(g => g.load = hw.totalGpuLoad);
+                    fullStats.gpu.forEach(g => {
+                        const isDedicated = g.isDedicated || g.vendor?.toLowerCase().includes('nvidia');
+                        if (isDedicated && dedicatedStats) {
+                            g.load = dedicatedStats.load;
+                            g.vramUsed = dedicatedStats.memoryUsed;
+                            g.vram = dedicatedStats.memoryTotal || g.vram;
+                            if (dedicatedStats.temperature) {
+                                g.temperature = dedicatedStats.temperature;
+                            }
+                        } else if (!isDedicated) {
+                            const dedicatedLoad = dedicatedStats ? dedicatedStats.load : 0;
+                            g.load = Math.max(0, Math.min(100, hw.totalGpuLoad - dedicatedLoad));
+                        }
+                    });
                 }
             }
         }, 2000);
@@ -68,9 +88,23 @@ async function updateSlowStats() {
         fullStats.cpu = { ...fullStats.cpu, ...slow.cpu };
         fullStats.storage = slow.storage;
         
-        const currentLoad = (fullStats.gpu && fullStats.gpu[0]) ? fullStats.gpu[0].load : 0;
-        fullStats.gpu = slow.gpu;
-        if (fullStats.gpu) fullStats.gpu.forEach(g => g.load = currentLoad);
+        const existingData = {};
+        if (fullStats.gpu) {
+            fullStats.gpu.forEach(g => {
+                existingData[g.model] = {
+                    load: g.load,
+                    vramUsed: g.vramUsed,
+                    temperature: g.temperature
+                };
+            });
+        }
+
+        fullStats.gpu = slow.gpu.map(g => ({
+            ...g,
+            load: existingData[g.model]?.load ?? 0,
+            vramUsed: existingData[g.model]?.vramUsed,
+            temperature: existingData[g.model]?.temperature ?? g.temperature
+        }));
     }
 }
 
