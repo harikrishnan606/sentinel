@@ -8,17 +8,19 @@ import GpuWidget from './components/GpuWidget';
 import ServiceShortcuts from './components/ServiceShortcuts';
 import axios from 'axios';
 
-function PowerButton({ action, label, color, textColor, onConfirm }) {
+function PowerButton({ action, label, color, textColor, icon, onConfirm }) {
     const [confirming, setConfirming] = React.useState(false);
 
     React.useEffect(() => {
         if (confirming) {
-            const timer = setTimeout(() => setConfirming(false), 3000);
+            const timer = setTimeout(() => setConfirming(false), 4000);
             return () => clearTimeout(timer);
         }
     }, [confirming]);
 
-    const handleClick = () => {
+    const handleClick = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
         if (confirming) {
             onConfirm(action);
             setConfirming(false);
@@ -29,21 +31,31 @@ function PowerButton({ action, label, color, textColor, onConfirm }) {
 
     return (
         <button
-            className="btn"
+            type="button"
+            className="power-btn"
             style={{
                 backgroundColor: confirming ? 'var(--danger)' : color,
                 color: confirming ? '#fff' : textColor,
-                transition: 'all 0.2s ease',
-                minWidth: '100px'
+                boxShadow: confirming ? '0 0 12px rgba(239, 68, 68, 0.4)' : 'none'
             }}
             onClick={handleClick}
         >
-            {confirming ? 'Confirm?' : label}
+            {icon}
+            <span>{confirming ? 'Confirm?' : label}</span>
         </button>
     );
 }
 
 function Dashboard({ metrics, socket }) {
+    const [toast, setToast] = React.useState(null);
+
+    const showToast = (message, type = 'success') => {
+        setToast({ message, type });
+        setTimeout(() => {
+            setToast((current) => (current?.message === message ? null : current));
+        }, 4000);
+    };
+
     const totalStorage = metrics.storage.reduce((acc, drive) => acc + drive.size, 0);
     const totalUsed = metrics.storage.reduce((acc, drive) => acc + drive.used, 0);
     const totalFree = totalStorage - totalUsed;
@@ -60,24 +72,70 @@ function Dashboard({ metrics, socket }) {
         try {
             console.log(`Sending power action: ${action}`);
             const response = await axios.post('/api/system/power', { action });
-            console.log('Power action response:', response.data);
-            alert(`Success: ${response.data.message}`);
+            showToast(response.data?.message || `System ${action} triggered`, 'success');
         } catch (error) {
             console.error('Power action failed:', error);
             const errorMsg = error.response?.data?.error || error.message;
-            const status = error.response?.status;
-            alert(`Failed to ${action} (Status: ${status}): ${errorMsg}`);
+            showToast(`Failed to ${action}: ${errorMsg}`, 'error');
         }
     };
 
     return (
         <>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginBottom: '1rem' }}>
+            {/* Non-blocking Mobile-Friendly Toast Notification */}
+            {toast && (
+                <div
+                    style={{
+                        position: 'fixed',
+                        bottom: '1.5rem',
+                        left: '50%',
+                        transform: 'translateX(-50%)',
+                        width: 'calc(100% - 2rem)',
+                        maxWidth: '420px',
+                        backgroundColor: toast.type === 'error' ? 'var(--danger)' : 'var(--bg-secondary)',
+                        color: '#fff',
+                        padding: '0.85rem 1.25rem',
+                        borderRadius: '0.5rem',
+                        border: '1px solid var(--border)',
+                        boxShadow: '0 10px 25px rgba(0,0,0,0.5)',
+                        zIndex: 9999,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        fontSize: '0.9rem',
+                        fontWeight: 500
+                    }}
+                >
+                    <span>{toast.message}</span>
+                    <button
+                        type="button"
+                        onClick={() => setToast(null)}
+                        style={{
+                            background: 'transparent',
+                            color: '#fff',
+                            border: 'none',
+                            fontSize: '1.1rem',
+                            cursor: 'pointer',
+                            marginLeft: '0.5rem',
+                            padding: '0 0.25rem'
+                        }}
+                    >
+                        ✕
+                    </button>
+                </div>
+            )}
+
+            <div className="power-controls">
                 <PowerButton
                     action="sleep"
                     label="Sleep"
                     color="var(--warning)"
                     textColor="#000"
+                    icon={(
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+                        </svg>
+                    )}
                     onConfirm={handlePowerAction}
                 />
                 <PowerButton
@@ -85,6 +143,13 @@ function Dashboard({ metrics, socket }) {
                     label="Hibernate"
                     color="var(--accent)"
                     textColor="#fff"
+                    icon={(
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                            <rect x="2" y="4" width="20" height="16" rx="2" />
+                            <path d="M10 4v4" />
+                            <path d="M2 8h20" />
+                        </svg>
+                    )}
                     onConfirm={handlePowerAction}
                 />
                 <PowerButton
@@ -92,6 +157,12 @@ function Dashboard({ metrics, socket }) {
                     label="Restart"
                     color="var(--success)"
                     textColor="#fff"
+                    icon={(
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                            <polyline points="23 4 23 10 17 10" />
+                            <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+                        </svg>
+                    )}
                     onConfirm={handlePowerAction}
                 />
                 <PowerButton
@@ -99,6 +170,12 @@ function Dashboard({ metrics, socket }) {
                     label="Shutdown"
                     color="var(--danger)"
                     textColor="#fff"
+                    icon={(
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M18.36 6.64a9 9 0 1 1-12.73 0" />
+                            <line x1="12" y1="2" x2="12" y2="12" />
+                        </svg>
+                    )}
                     onConfirm={handlePowerAction}
                 />
             </div>
