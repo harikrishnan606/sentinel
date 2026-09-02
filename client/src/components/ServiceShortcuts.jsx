@@ -148,50 +148,132 @@ function extractPort(resolvedUrl, explicitPort) {
     }
 }
 
-const ServiceCard = ({ name, resolvedUrl, icon, color, port }) => (
-    <a
-        href={resolvedUrl}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="card service-card"
-        style={{
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            textDecoration: 'none',
-            color: 'var(--text-primary)',
-            padding: '1.5rem',
-            transition: 'transform 0.2s, box-shadow 0.2s, background-color 0.2s',
-            borderTop: `4px solid ${color || 'var(--accent)'}`,
-            cursor: 'pointer'
-        }}
-        onMouseEnter={(e) => {
-            e.currentTarget.style.transform = 'translateY(-4px)';
-            e.currentTarget.style.boxShadow = '0 8px 16px rgba(0,0,0,0.2)';
-            e.currentTarget.style.backgroundColor = 'var(--bg-secondary)';
-        }}
-        onMouseLeave={(e) => {
-            e.currentTarget.style.transform = 'translateY(0)';
-            e.currentTarget.style.boxShadow = 'none';
-            e.currentTarget.style.backgroundColor = 'var(--bg-primary)';
-        }}
-    >
-        <div style={{ marginBottom: '1rem', color: color || 'var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            {renderIcon(icon)}
-        </div>
-        <div style={{ fontWeight: 'bold', fontSize: '1.1rem', textAlign: 'center' }}>{name}</div>
-        {port ? (
-            <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '0.25rem' }}>
-                Port: {port}
+const ServiceCard = ({ name, resolvedUrl, icon, color, port, statusInfo }) => {
+    const status = statusInfo?.status || 'checking';
+    const latency = statusInfo?.latency;
+    const error = statusInfo?.error;
+
+    let statusColor = 'var(--warning)';
+    let statusBg = 'rgba(234, 179, 8, 0.15)';
+    let statusLabel = 'Checking';
+    let statusTooltip = 'Checking connectivity...';
+
+    if (status === 'online') {
+        statusColor = 'var(--success)';
+        statusBg = 'rgba(34, 197, 94, 0.15)';
+        statusLabel = 'Online';
+        statusTooltip = latency ? `Online (${latency}ms)` : 'Online';
+    } else if (status === 'offline') {
+        statusColor = 'var(--danger)';
+        statusBg = 'rgba(239, 68, 68, 0.15)';
+        statusLabel = 'Offline';
+        statusTooltip = error ? `Offline: ${error}` : 'Offline / Unreachable';
+    }
+
+    return (
+        <a
+            href={resolvedUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="card service-card"
+            title={statusTooltip}
+            style={{
+                position: 'relative',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                textDecoration: 'none',
+                color: 'var(--text-primary)',
+                padding: '1.5rem',
+                transition: 'transform 0.2s, box-shadow 0.2s, background-color 0.2s',
+                borderTop: `4px solid ${color || 'var(--accent)'}`,
+                cursor: 'pointer'
+            }}
+            onMouseEnter={(e) => {
+                e.currentTarget.style.transform = 'translateY(-4px)';
+                e.currentTarget.style.boxShadow = '0 8px 16px rgba(0,0,0,0.2)';
+                e.currentTarget.style.backgroundColor = 'var(--bg-secondary)';
+            }}
+            onMouseLeave={(e) => {
+                e.currentTarget.style.transform = 'translateY(0)';
+                e.currentTarget.style.boxShadow = 'none';
+                e.currentTarget.style.backgroundColor = 'var(--bg-primary)';
+            }}
+        >
+            {/* Top-right Status Badge */}
+            <div
+                style={{
+                    position: 'absolute',
+                    top: '0.75rem',
+                    right: '0.75rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.35rem',
+                    fontSize: '0.7rem',
+                    fontWeight: 600,
+                    padding: '0.2rem 0.5rem',
+                    borderRadius: '9999px',
+                    backgroundColor: statusBg,
+                    color: statusColor,
+                    letterSpacing: '0.02em',
+                    transition: 'all 0.2s ease'
+                }}
+            >
+                <span
+                    style={{
+                        width: '6px',
+                        height: '6px',
+                        borderRadius: '50%',
+                        backgroundColor: 'currentColor',
+                        boxShadow: status === 'online' ? '0 0 6px var(--success)' : 'none',
+                        animation: status === 'checking' ? 'pulse 1.5s infinite' : 'none'
+                    }}
+                />
+                <span>{statusLabel}</span>
             </div>
-        ) : (
-            <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '0.25rem' }}>
-                Link
+
+            {/* App Icon with anchored status indicator dot */}
+            <div
+                style={{
+                    position: 'relative',
+                    marginBottom: '1rem',
+                    color: color || 'var(--accent)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                }}
+            >
+                {renderIcon(icon)}
+                <span
+                    style={{
+                        position: 'absolute',
+                        bottom: '-2px',
+                        right: '-2px',
+                        width: '12px',
+                        height: '12px',
+                        borderRadius: '50%',
+                        backgroundColor: statusColor,
+                        border: '2px solid var(--bg-primary)',
+                        boxShadow: status === 'online' ? '0 0 8px var(--success)' : 'none',
+                        transition: 'background-color 0.3s ease, box-shadow 0.3s ease'
+                    }}
+                />
             </div>
-        )}
-    </a>
-);
+
+            <div style={{ fontWeight: 'bold', fontSize: '1.1rem', textAlign: 'center' }}>{name}</div>
+            {port ? (
+                <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '0.25rem' }}>
+                    Port: {port}
+                </div>
+            ) : (
+                <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '0.25rem' }}>
+                    Link
+                </div>
+            )}
+        </a>
+    );
+};
 
 const ServiceShortcuts = () => {
     const host = window.location.hostname;
@@ -215,6 +297,7 @@ const ServiceShortcuts = () => {
             icon: 'netdata'
         }
     ]);
+    const [statuses, setStatuses] = useState({});
 
     useEffect(() => {
         let isMounted = true;
@@ -233,17 +316,42 @@ const ServiceShortcuts = () => {
         };
     }, []);
 
+    useEffect(() => {
+        let isMounted = true;
+        const fetchStatus = () => {
+            axios.get('/api/shortcuts/status')
+                .then((res) => {
+                    if (isMounted && res.data && typeof res.data === 'object') {
+                        setStatuses(res.data);
+                    }
+                })
+                .catch((err) => {
+                    console.warn('Failed to fetch /api/shortcuts/status:', err.message);
+                });
+        };
+
+        fetchStatus();
+        const interval = setInterval(fetchStatus, 15000);
+
+        return () => {
+            isMounted = false;
+            clearInterval(interval);
+        };
+    }, [services]);
+
     return (
         <div className="dashboard-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', marginBottom: '1.5rem' }}>
             {services.map((service, idx) => {
                 const resolved = resolveUrl(service.url, host);
                 const port = extractPort(resolved, service.port);
+                const statusInfo = statuses[service.name || service.url];
                 return (
                     <ServiceCard
                         key={service.name || idx}
                         {...service}
                         resolvedUrl={resolved}
                         port={port}
+                        statusInfo={statusInfo}
                     />
                 );
             })}

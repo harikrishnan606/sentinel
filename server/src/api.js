@@ -4,6 +4,74 @@ const si = require('systeminformation');
 const { exec } = require('child_process');
 const fs = require('fs');
 const path = require('path');
+const net = require('net');
+
+function checkServiceStatus(urlStr) {
+    return new Promise((resolve) => {
+        const startTime = Date.now();
+        let parsed;
+        try {
+            const resolvedUrl = urlStr.replace(/\{host\}|\$\{host\}/g, '127.0.0.1');
+            parsed = new URL(resolvedUrl);
+        } catch {
+            return resolve({ status: 'offline', latency: 0, error: 'Invalid URL' });
+        }
+
+        const host = parsed.hostname || '127.0.0.1';
+        let port = parsed.port;
+        if (!port) {
+            port = parsed.protocol === 'https:' ? 443 : 80;
+        } else {
+            port = parseInt(port, 10);
+        }
+
+        const socket = new net.Socket();
+        let isResolved = false;
+
+        const cleanup = () => {
+            if (!socket.destroyed) {
+                socket.destroy();
+            }
+        };
+
+        socket.setTimeout(2000);
+
+        socket.on('connect', () => {
+            if (!isResolved) {
+                isResolved = true;
+                const latency = Date.now() - startTime;
+                cleanup();
+                resolve({ status: 'online', latency });
+            }
+        });
+
+        socket.on('timeout', () => {
+            if (!isResolved) {
+                isResolved = true;
+                cleanup();
+                resolve({ status: 'offline', latency: 0, error: 'Timeout' });
+            }
+        });
+
+        socket.on('error', (err) => {
+            if (!isResolved) {
+                isResolved = true;
+                cleanup();
+                resolve({ status: 'offline', latency: 0, error: err.code || err.message });
+            }
+        });
+
+        try {
+            socket.connect(port, host);
+        } catch (err) {
+            if (!isResolved) {
+                isResolved = true;
+                cleanup();
+                resolve({ status: 'offline', latency: 0, error: err.message });
+            }
+        }
+    });
+}
 
 const DEFAULT_SHORTCUTS = [
     {
@@ -64,6 +132,35 @@ router.get('/shortcuts', (req, res) => {
             return res.json(DEFAULT_SHORTCUTS);
         }
     });
+});
+
+router.get('/shortcuts/status', async (req, res) => {
+    const shortcutsPath = path.resolve(__dirname, '../shortcuts.json');
+    const templatePath = path.resolve(__dirname, '../template.shortcuts.json');
+
+    let shortcuts = DEFAULT_SHORTCUTS;
+    const targetPath = fs.existsSync(shortcutsPath) ? shortcutsPath : (fs.existsSync(templatePath) ? templatePath : null);
+
+    if (targetPath) {
+        try {
+            const parsed = JSON.parse(fs.readFileSync(targetPath, 'utf-8'));
+            if (Array.isArray(parsed)) {
+                shortcuts = parsed;
+            }
+        } catch (err) {
+            console.error('Error reading shortcuts for status check:', err);
+        }
+    }
+
+    const results = {};
+    await Promise.all(
+        shortcuts.map(async (sc) => {
+            const key = sc.name || sc.url;
+            results[key] = await checkServiceStatus(sc.url);
+        })
+    );
+
+    res.json(results);
 });
 
 // Middleware to check for authentication (Mocked for now)
