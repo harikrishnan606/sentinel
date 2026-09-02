@@ -1,16 +1,35 @@
-# React + Vite
+# 🛡️ Sentinel Client
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+The frontend web application for Project Sentinel, built with React 19 and Vite 7.
 
-Currently, two official plugins are available:
+## Tech Stack
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- **Framework**: React 19 (`react`, `react-dom`)
+- **Build Tool**: Vite 7 (`vite`, `@vitejs/plugin-react`)
+- **Real-Time Communication**: `socket.io-client`
+- **Charts & Visualization**: `recharts`
+- **HTTP Client**: `axios`
+- **Linting**: ESLint flat config (`eslint-plugin-react-hooks`, `eslint-plugin-react-refresh`)
 
-## React Compiler
+## Available Scripts
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+### `npm run dev`
+Starts the local development server with Vite Fast Refresh.
+Requests to `/api` and `/socket.io` are automatically proxied to the backend on `http://localhost:80`.
 
-## Expanding the ESLint configuration
+### `npm run build`
+Bundles and minifies the production application directly into `../server/public/`, ready for Express to serve statically.
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+### `npm run lint`
+Runs ESLint across all `.js` and `.jsx` files.
+
+### `npm run preview`
+Locally previews the production build.
+
+## Key Components
+
+- **`Dashboard.jsx`**: Primary dashboard view incorporating metric widgets, system history, and power controls.
+- **`ServiceShortcuts.jsx`**: Dynamically renders configurable application cards fetched from `/api/shortcuts` with `{host}` interpolation and flexible icon resolution.
+- **`ProcessTable.jsx`**: Interactive, collapsible table of running processes with sorting, filtering, and 3-second confirmation kill triggers.
+- **`HistoryCharts.jsx`**: Dual-axis real-time charts plotting CPU % and RAM usage over time.
+- **`CpuWidget.jsx`**, **`RamWidget.jsx`**, **`GpuWidget.jsx`**, **`NetworkWidget.jsx`**: Specialized real-time telemetry display cards.
