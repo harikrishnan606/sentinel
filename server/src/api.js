@@ -2,6 +2,69 @@ const express = require('express');
 const router = express.Router();
 const si = require('systeminformation');
 const { exec } = require('child_process');
+const fs = require('fs');
+const path = require('path');
+
+const DEFAULT_SHORTCUTS = [
+    {
+        name: 'Plex',
+        url: 'http://{host}:32400/web',
+        color: '#e5a00d',
+        icon: 'plex'
+    },
+    {
+        name: 'Jellyfin',
+        url: 'http://{host}:8096',
+        color: '#00a4dc',
+        icon: 'jellyfin'
+    },
+    {
+        name: 'Netdata',
+        url: 'http://{host}:19999',
+        color: '#00ab44',
+        icon: 'netdata'
+    }
+];
+
+router.get('/shortcuts', (req, res) => {
+    const shortcutsPath = path.resolve(__dirname, '../shortcuts.json');
+    const templatePath = path.resolve(__dirname, '../template.shortcuts.json');
+
+    if (!fs.existsSync(shortcutsPath)) {
+        try {
+            if (fs.existsSync(templatePath)) {
+                fs.copyFileSync(templatePath, shortcutsPath);
+            } else {
+                fs.writeFileSync(shortcutsPath, JSON.stringify(DEFAULT_SHORTCUTS, null, 2), 'utf-8');
+            }
+        } catch (err) {
+            console.error('Error initializing shortcuts.json from template:', err);
+            try {
+                if (fs.existsSync(templatePath)) {
+                    return res.json(JSON.parse(fs.readFileSync(templatePath, 'utf-8')));
+                }
+            } catch {}
+            return res.json(DEFAULT_SHORTCUTS);
+        }
+    }
+
+    fs.readFile(shortcutsPath, 'utf-8', (err, data) => {
+        if (err) {
+            console.error('Error reading shortcuts.json:', err);
+            return res.json(DEFAULT_SHORTCUTS);
+        }
+        try {
+            const parsed = JSON.parse(data);
+            if (Array.isArray(parsed)) {
+                return res.json(parsed);
+            }
+            return res.json(DEFAULT_SHORTCUTS);
+        } catch (parseErr) {
+            console.error('Error parsing shortcuts.json:', parseErr);
+            return res.json(DEFAULT_SHORTCUTS);
+        }
+    });
+});
 
 // Middleware to check for authentication (Mocked for now)
 const requireAuth = (req, res, next) => {
@@ -12,7 +75,8 @@ const requireAuth = (req, res, next) => {
 
 router.post('/process/kill', requireAuth, async (req, res) => {
     const { pid } = req.body;
-    if (!pid) return res.status(400).json({ error: 'PID required' });
+    const numericPid = parseInt(pid, 10);
+    if (!numericPid || isNaN(numericPid)) return res.status(400).json({ error: 'Valid numeric PID required' });
 
     try {
         // Using systeminformation to kill process is safer cross-platform

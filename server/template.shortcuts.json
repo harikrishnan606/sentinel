@@ -1,0 +1,20 @@
+[
+  {
+    "name": "Plex",
+    "url": "http://{host}:32400/web",
+    "color": "#e5a00d",
+    "icon": "plex"
+  },
+  {
+    "name": "Jellyfin",
+    "url": "http://{host}:8096",
+    "color": "#00a4dc",
+    "icon": "jellyfin"
+  },
+  {
+    "name": "Netdata",
+    "url": "http://{host}:19999",
+    "color": "#00ab44",
+    "icon": "netdata"
+  }
+]
