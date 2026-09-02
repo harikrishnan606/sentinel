@@ -66,6 +66,35 @@ const PRESET_ICONS = {
             <line x1="2" y1="12" x2="22" y2="12" />
             <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
         </svg>
+    ),
+    casaos: (
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+            <polyline points="9 22 9 12 15 12 15 22" />
+        </svg>
+    ),
+    hermes: (
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 2a4 4 0 0 1 4 4v2H8V6a4 4 0 0 1 4-4z" />
+            <rect x="4" y="8" width="16" height="12" rx="3" />
+            <circle cx="9" cy="14" r="1.5" fill="currentColor" />
+            <circle cx="15" cy="14" r="1.5" fill="currentColor" />
+            <path d="M9 18h6" />
+            <path d="M2 14h2" />
+            <path d="M20 14h2" />
+        </svg>
+    ),
+    godseye: (
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z" />
+            <circle cx="12" cy="12" r="3" />
+        </svg>
+    ),
+    godseyeview: (
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z" />
+            <circle cx="12" cy="12" r="3" />
+        </svg>
     )
 };
 
@@ -279,22 +308,22 @@ const ServiceShortcuts = () => {
     const host = window.location.hostname;
     const [services, setServices] = useState([
         {
-            name: 'Plex',
-            url: 'http://{host}:32400/web',
-            color: '#e5a00d',
-            icon: 'plex'
+            name: 'CasaOS',
+            url: 'http://{host}:3000',
+            color: '#0ea5e9',
+            icon: 'casaos'
         },
         {
-            name: 'Jellyfin',
-            url: 'http://{host}:8096',
-            color: '#00a4dc',
-            icon: 'jellyfin'
+            name: 'Hermes Agent',
+            url: 'http://{host}:9119',
+            color: '#f97316',
+            icon: 'hermes'
         },
         {
-            name: 'Netdata',
-            url: 'http://{host}:19999',
-            color: '#00ab44',
-            icon: 'netdata'
+            name: 'Godseye View',
+            url: 'http://{host}:4173',
+            color: '#10b981',
+            icon: 'godseye'
         }
     ]);
     const [statuses, setStatuses] = useState({});

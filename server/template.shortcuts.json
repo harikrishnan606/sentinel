@@ -1,20 +1,20 @@
 [
   {
-    "name": "Plex",
-    "url": "http://{host}:32400/web",
-    "color": "#e5a00d",
-    "icon": "plex"
+    "name": "CasaOS",
+    "url": "http://{host}:3000",
+    "color": "#0ea5e9",
+    "icon": "casaos"
   },
   {
-    "name": "Jellyfin",
-    "url": "http://{host}:8096",
-    "color": "#00a4dc",
-    "icon": "jellyfin"
+    "name": "Hermes Agent",
+    "url": "http://{host}:9119",
+    "color": "#f97316",
+    "icon": "hermes"
   },
   {
-    "name": "Netdata",
-    "url": "http://{host}:19999",
-    "color": "#00ab44",
-    "icon": "netdata"
+    "name": "Godseye View",
+    "url": "http://{host}:4173",
+    "color": "#10b981",
+    "icon": "godseye"
   }
 ]
