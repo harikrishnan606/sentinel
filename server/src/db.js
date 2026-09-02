@@ -11,6 +11,28 @@ const db = new sqlite3.Database(dbPath, (err) => {
     }
 });
 
+let pruneTimer = null;
+
+function pruneOldMetrics(hours = 24, maxRows = 86400) {
+    const cutoffIso = new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
+    // Prune both by timestamp cutoff and cap at maxRows to guarantee bounded size
+    db.run(
+        `DELETE FROM metrics 
+         WHERE timestamp < ? 
+            OR id < (SELECT MAX(id) - ? FROM metrics)`,
+        [cutoffIso, maxRows],
+        function(err) {
+            if (err) {
+                console.warn('Could not prune old metrics:', err.message);
+            } else if (this.changes > 0) {
+                console.log(`Pruned ${this.changes} old metric records.`);
+                // Periodic WAL checkpoint to keep log file compact
+                db.run('PRAGMA wal_checkpoint(PASSIVE);');
+            }
+        }
+    );
+}
+
 function initDb() {
     db.serialize(() => {
         // Enable Write-Ahead Logging for high-throughput, non-blocking inserts
@@ -28,10 +50,14 @@ function initDb() {
 
         db.run('CREATE INDEX IF NOT EXISTS idx_metrics_timestamp ON metrics (timestamp)');
 
-        // Prune entries older than 7 days to maintain high performance
-        db.run("DELETE FROM metrics WHERE timestamp < datetime('now', '-7 days')", (err) => {
-            if (err) console.warn('Could not prune old metrics:', err.message);
-        });
+        // Initial pruning on startup (keep last 24h / 86,400 entries)
+        pruneOldMetrics(24);
+
+        // Schedule automatic pruning every hour
+        if (!pruneTimer) {
+            pruneTimer = setInterval(() => pruneOldMetrics(24), 60 * 60 * 1000);
+            if (pruneTimer.unref) pruneTimer.unref();
+        }
     });
 }
 
@@ -56,4 +82,4 @@ function getHistory(limit = 60, callback) {
     });
 }
 
-module.exports = { db, saveMetrics, getHistory };
+module.exports = { db, saveMetrics, getHistory, pruneOldMetrics };
