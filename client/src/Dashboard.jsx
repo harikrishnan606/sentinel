@@ -43,7 +43,7 @@ function PowerButton({ action, label, color, textColor, onConfirm }) {
     );
 }
 
-function Dashboard({ metrics }) {
+function Dashboard({ metrics, socket }) {
     const totalStorage = metrics.storage.reduce((acc, drive) => acc + drive.size, 0);
     const totalUsed = metrics.storage.reduce((acc, drive) => acc + drive.used, 0);
     const totalFree = totalStorage - totalUsed;
@@ -118,7 +118,7 @@ function Dashboard({ metrics }) {
                         <div className="card-title">System History</div>
                     </div>
                     <div style={{ flex: 1, minHeight: 0 }}>
-                        <HistoryCharts />
+                        <HistoryCharts socket={socket} />
                     </div>
                 </div>
                 <div className="card">

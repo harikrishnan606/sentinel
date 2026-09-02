@@ -50,7 +50,7 @@ function App() {
 
       <main>
         {metrics ? (
-          <Dashboard metrics={metrics} />
+          <Dashboard metrics={metrics} socket={socket} />
         ) : (
           <div style={{ textAlign: 'center', padding: '4rem', color: 'var(--text-secondary)' }}>
             Connecting to Sentinel Core...

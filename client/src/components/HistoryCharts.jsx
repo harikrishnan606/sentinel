@@ -1,10 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import io from 'socket.io-client';
 
-const socket = io();
-
-function HistoryCharts() {
+function HistoryCharts({ socket }) {
     const [data, setData] = useState([]);
     const [totalRam, setTotalRam] = useState(0);
     const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
@@ -16,7 +13,9 @@ function HistoryCharts() {
     }, []);
 
     useEffect(() => {
-        socket.on('history', (history) => {
+        if (!socket) return;
+
+        const handleHistory = (history) => {
             const formatted = history.map(h => ({
                 ...h,
                 time: new Date(h.timestamp).toLocaleTimeString(),
@@ -28,9 +27,9 @@ function HistoryCharts() {
             if (history.length > 0 && history[history.length - 1].memory?.total) {
                 setTotalRam(Math.round(history[history.length - 1].memory.total / 1024 / 1024 / 1024));
             }
-        });
+        };
 
-        socket.on('metrics', (metric) => {
+        const handleMetrics = (metric) => {
             // Update total RAM if not set
             if (metric.memory?.total) {
                 setTotalRam(Math.round(metric.memory.total / 1024 / 1024 / 1024));
@@ -48,13 +47,16 @@ function HistoryCharts() {
 
                 return newData;
             });
-        });
+        };
+
+        socket.on('history', handleHistory);
+        socket.on('metrics', handleMetrics);
 
         return () => {
-            socket.off('history');
-            socket.off('metrics');
+            socket.off('history', handleHistory);
+            socket.off('metrics', handleMetrics);
         };
-    }, []);
+    }, [socket]);
 
     const chartMargin = isMobile
         ? { top: 10, right: 0, left: -20, bottom: 0 }
