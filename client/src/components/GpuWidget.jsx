@@ -1,9 +1,9 @@
 import React from 'react';
 
-function SingleGpuCard({ gpu }) {
+function SingleGpuCard({ gpu, showTypeBadge = false }) {
     if (!gpu) return null;
 
-    const isDedicated = gpu.isDedicated || (gpu.vendor && gpu.vendor.toLowerCase().includes('nvidia')) || (gpu.type === 'Dedicated');
+    const isDedicated = Boolean(gpu.isDedicated || gpu.type === 'Dedicated');
     const typeLabel = isDedicated ? 'Dedicated' : 'Integrated';
     const typeBadgeColor = isDedicated ? 'var(--accent)' : 'var(--text-secondary)';
 
@@ -18,17 +18,19 @@ function SingleGpuCard({ gpu }) {
             <div className="card-header">
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                     <div className="card-title">GPU</div>
-                    <span style={{
-                        fontSize: '0.7rem',
-                        fontWeight: 600,
-                        padding: '0.15rem 0.45rem',
-                        borderRadius: '9999px',
-                        backgroundColor: isDedicated ? 'rgba(59, 130, 246, 0.15)' : 'rgba(148, 163, 184, 0.15)',
-                        color: typeBadgeColor,
-                        border: '1px solid var(--border)'
-                    }}>
-                        {typeLabel}
-                    </span>
+                    {showTypeBadge && (
+                        <span style={{
+                            fontSize: '0.7rem',
+                            fontWeight: 600,
+                            padding: '0.15rem 0.45rem',
+                            borderRadius: '9999px',
+                            backgroundColor: isDedicated ? 'rgba(59, 130, 246, 0.15)' : 'rgba(148, 163, 184, 0.15)',
+                            color: typeBadgeColor,
+                            border: '1px solid var(--border)'
+                        }}>
+                            {typeLabel}
+                        </span>
+                    )}
                 </div>
                 <div className="card-title" style={{ fontSize: '0.75rem' }}>{gpu.vendor}</div>
             </div>
@@ -60,23 +62,38 @@ function SingleGpuCard({ gpu }) {
 }
 
 function GpuWidget({ data }) {
-    if (!data) return <div className="card">No GPU Detected</div>;
+    if (!data) return null;
 
-    if (Array.isArray(data)) {
-        // Filter out virtual display drivers (e.g. Microsoft Remote Display Adapter)
-        const realGpus = data.filter(g => g.vendor && !g.vendor.includes('Microsoft') && g.model && !g.model.includes('Remote Display'));
-        if (realGpus.length === 0) return <div className="card">No GPU Detected</div>;
+    const gpus = Array.isArray(data) ? data : [data];
 
-        return (
-            <>
-                {realGpus.map((gpu, index) => (
-                    <SingleGpuCard key={gpu.model || index} gpu={gpu} />
-                ))}
-            </>
-        );
-    }
+    // Filter out virtual/software display adapters
+    const realGpus = gpus.filter(g => {
+        if (!g || !g.model) return false;
+        const name = `${g.vendor || ''} ${g.model || ''}`.toLowerCase();
+        return !name.includes('microsoft') && 
+               !name.includes('remote display') && 
+               !name.includes('basic display') && 
+               !name.includes('virtualbox') && 
+               !name.includes('vmware') && 
+               !name.includes('parsec');
+    });
 
-    return <SingleGpuCard gpu={data} />;
+    if (realGpus.length === 0) return null;
+
+    // Show [Integrated] and [Dedicated] badges only if multiple GPUs are present
+    const showTypeBadge = realGpus.length > 1;
+
+    return (
+        <>
+            {realGpus.map((gpu, index) => (
+                <SingleGpuCard 
+                    key={gpu.model || index} 
+                    gpu={gpu} 
+                    showTypeBadge={showTypeBadge} 
+                />
+            ))}
+        </>
+    );
 }
 
 export default GpuWidget;

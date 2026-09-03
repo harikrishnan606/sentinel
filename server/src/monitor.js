@@ -190,6 +190,47 @@ async function getHardwareProcessUsage() {
 
 let hasNvidiaSmi = null;
 
+function isRealGpu(gpu) {
+    if (!gpu || !gpu.model) return false;
+    const name = `${gpu.vendor || ''} ${gpu.model || ''}`.toLowerCase();
+    const virtualKeywords = [
+        'microsoft', 'remote display', 'basic display', 'basic render',
+        'virtualbox', 'vmware', 'parsec', 'citrix', 'spacedesk', 'iddcx', 'vnc'
+    ];
+    return !virtualKeywords.some(kw => name.includes(kw));
+}
+
+function isDedicatedGpu(gpu) {
+    if (!gpu || !gpu.model) return false;
+    const name = `${gpu.vendor || ''} ${gpu.model || ''}`.toLowerCase();
+
+    // Known integrated graphics keywords
+    const isIntelIntegrated = name.includes('intel') && 
+        (name.includes('uhd') || name.includes('hd graphics') || name.includes('iris') || !name.includes('arc'));
+    const isAmdIntegrated = (name.includes('amd') || name.includes('ati')) && 
+        (name.includes('radeon(tm)') || name.includes('vega') || name.includes('apu') || name.includes('graphics')) &&
+        !name.includes('rx') && !name.includes('pro');
+
+    if (isIntelIntegrated) return false;
+    if (isAmdIntegrated) return false;
+
+    // Known dedicated graphics keywords
+    if (name.includes('nvidia') || name.includes('geforce') || name.includes('quadro') || 
+        name.includes('rtx') || name.includes('gtx') || name.includes('tesla') || name.includes('titan')) {
+        return true;
+    }
+    if ((name.includes('amd') || name.includes('radeon')) && 
+        (name.includes('rx') || name.includes('pro') || name.includes('firepro') || name.includes('discrete'))) {
+        return true;
+    }
+    if (name.includes('intel') && name.includes('arc')) {
+        return true;
+    }
+
+    // Default fallback: only dedicated if explicitly not dynamic shared memory and substantial VRAM
+    return gpu.bus === 'PCI' && !gpu.vramDynamic && (gpu.vram && gpu.vram >= 2048);
+}
+
 async function getNvidiaStats() {
     if (hasNvidiaSmi === false) return null;
     try {
@@ -219,10 +260,11 @@ async function getSlowStats() {
             cachedGraphics = await si.graphics();
         }
 
-        const [cpu, fsSize, blockDevices] = await Promise.all([
+        const [cpu, fsSize, blockDevices, nvidiaList] = await Promise.all([
             si.cpu(),
             si.fsSize(),
-            si.blockDevices()
+            si.blockDevices(),
+            getNvidiaStats()
         ]);
 
         const driveLabels = {};
@@ -231,6 +273,49 @@ async function getSlowStats() {
                 driveLabels[device.mount] = device.label || 'Local Disk';
             }
         });
+
+        const hasNvidia = Array.isArray(nvidiaList) && nvidiaList.length > 0;
+        const detectedGpus = [];
+
+        (cachedGraphics.controllers || [])
+            .filter(isRealGpu)
+            .forEach(gpu => {
+                const isNvidia = gpu.vendor?.toLowerCase().includes('nvidia') || gpu.model?.toLowerCase().includes('geforce');
+                // If it's an NVIDIA card, only include it if nvidia-smi verified it is physically present and active
+                if (isNvidia && hasNvidiaSmi === false) {
+                    return;
+                }
+
+                const isDedicated = isDedicatedGpu(gpu);
+                detectedGpus.push({
+                    vendor: gpu.vendor,
+                    model: gpu.model,
+                    vram: gpu.vram,
+                    temperature: gpu.temperatureGpu || null,
+                    load: 0,
+                    isDedicated,
+                    type: isDedicated ? 'Dedicated' : 'Integrated'
+                });
+            });
+
+        // If nvidia-smi detected a dedicated GPU that wasn't indexed by si.graphics(), add it
+        if (hasNvidia) {
+            nvidiaList.forEach(nv => {
+                const exists = detectedGpus.some(g => g.model && g.model.toLowerCase().includes(nv.name.toLowerCase()));
+                if (!exists) {
+                    detectedGpus.push({
+                        vendor: 'NVIDIA',
+                        model: nv.name,
+                        vram: nv.memoryTotal,
+                        vramUsed: nv.memoryUsed,
+                        temperature: nv.temperature,
+                        load: nv.load,
+                        isDedicated: true,
+                        type: 'Dedicated'
+                    });
+                }
+            });
+        }
 
         return {
             cpu: {
@@ -249,20 +334,7 @@ async function getSlowStats() {
                 mount: drive.mount,
                 label: driveLabels[drive.mount] || 'Local Disk'
             })),
-            gpu: (cachedGraphics.controllers || [])
-                .filter(gpu => gpu.vendor && !gpu.vendor.includes('Microsoft') && gpu.model && !gpu.model.includes('Remote Display'))
-                .map(gpu => {
-                    const isDedicated = gpu.vendor?.toLowerCase().includes('nvidia') || (gpu.vram && gpu.vram > 2048) || false;
-                    return {
-                        vendor: gpu.vendor,
-                        model: gpu.model,
-                        vram: gpu.vram,
-                        temperature: gpu.temperatureGpu || null,
-                        load: 0,
-                        isDedicated,
-                        type: isDedicated ? 'Dedicated' : 'Integrated'
-                    };
-                })
+            gpu: detectedGpus
         };
     } catch (error) {
         console.error('Error gathering slow stats:', error);
